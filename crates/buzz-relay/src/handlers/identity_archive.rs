@@ -1198,6 +1198,40 @@ mod tests {
                 latest.content, "",
                 "the admin's delta must not carry the self request's text"
             );
+
+            // A request that still owns its row keeps its text.
+            let owner = Keys::generate().public_key().to_hex();
+            let owned = "c".repeat(64);
+            assert!(state
+                .db
+                .archive(
+                    tenant.community(),
+                    &owner,
+                    "self",
+                    &owner,
+                    None,
+                    None,
+                    &owned,
+                )
+                .await
+                .expect("archive row"));
+            let request = DeltaRequest {
+                unarchive: false,
+                target_hex: &owner,
+                consent_path: "self",
+                actor_hex: &owner,
+                request_event_id: &owned,
+                content: "self-written text",
+                reason: None,
+            };
+            settle_nipia_delta(&tenant, &state, &request, true)
+                .await
+                .expect("delta settles");
+            let latest = latest_nipia_delta(&tenant, &state, &owner)
+                .await
+                .expect("latest delta")
+                .expect("a delta");
+            assert_eq!(latest.content, "self-written text");
         }
 
         /// An unarchive publisher that pauses while the key is archived again
