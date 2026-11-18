@@ -4563,8 +4563,8 @@ pub async fn reconcile_channel_events(
 /// The gate is scoped to a `CommunityId`: only a publisher whose tenant matches
 /// the armed community is held. Publishers from other tenants — the rapid
 /// archive/unarchive or owner-archive regressions running in parallel under the
-/// Rust test runner — pass straight through and never consume the gate armed
-/// for the concurrent-publisher test's unique tenant.
+/// Rust test runner — pass straight through. Each community has its own gate,
+/// so a test never consumes or replaces the gate another test armed.
 #[cfg(test)]
 pub(crate) mod publish_test_hooks {
     use buzz_core::tenant::CommunityId;
@@ -4577,7 +4577,9 @@ pub(crate) mod publish_test_hooks {
         release: Arc<Notify>,
     }
 
-    static GATE: Mutex<Option<Gate>> = Mutex::new(None);
+    /// One armed gate per community, so tests running in parallel never
+    /// replace each other's gate.
+    static GATES: Mutex<Vec<Gate>> = Mutex::new(Vec::new());
 
     /// Arm a one-shot barrier for `community`. Await the returned receiver to
     /// learn when the held publisher has reached the hook (i.e. has read
@@ -4587,7 +4589,9 @@ pub(crate) mod publish_test_hooks {
     pub(crate) fn arm(community: CommunityId) -> (oneshot::Receiver<()>, Arc<Notify>) {
         let (tx, rx) = oneshot::channel();
         let release = Arc::new(Notify::new());
-        *GATE.lock().unwrap() = Some(Gate {
+        let mut gates = GATES.lock().unwrap();
+        gates.retain(|gate| gate.community != community);
+        gates.push(Gate {
             community,
             arrived: tx,
             release: release.clone(),
@@ -4597,11 +4601,11 @@ pub(crate) mod publish_test_hooks {
 
     pub(crate) async fn after_reading_archive_state(community: CommunityId) {
         let gate = {
-            let mut slot = GATE.lock().unwrap();
-            match slot.as_ref() {
-                Some(gate) if gate.community == community => slot.take(),
-                _ => None,
-            }
+            let mut gates = GATES.lock().unwrap();
+            gates
+                .iter()
+                .position(|gate| gate.community == community)
+                .map(|index| gates.swap_remove(index))
         };
         if let Some(gate) = gate {
             let _ = gate.arrived.send(());
