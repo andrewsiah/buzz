@@ -201,7 +201,13 @@ async fn settle_nipia_delta(
                     &row.consent_path,
                     &row.actor,
                     &row.request_event_id,
-                    if request.unarchive { "" } else { content },
+                    // The request's own text only on the delta for its own
+                    // row: a concurrent request may have replaced the row.
+                    if row.request_event_id == request.request_event_id {
+                        content
+                    } else {
+                        ""
+                    },
                     row.reason.as_deref(),
                     row.replaced_by.as_deref(),
                 )
@@ -1123,6 +1129,74 @@ mod tests {
                 replaced_by,
                 Some(successor_hex),
                 "the newest delta must report the stored replacement"
+            );
+        }
+
+        /// A request whose row another request replaced before it was read
+        /// must not put its own text on the delta for the other request.
+        #[tokio::test]
+        #[ignore = "requires Postgres and Redis"]
+        async fn archive_delta_carries_only_its_own_requests_text() {
+            let pool = test_pool().await.expect("Postgres for an ignored test");
+            let state = test_state(pool.clone())
+                .await
+                .expect("Redis for an ignored test");
+            let tenant = seed_test_community(&pool).await;
+            let target = Keys::generate().public_key().to_hex();
+            let admin = Keys::generate().public_key().to_hex();
+            let successor = Keys::generate().public_key().to_hex();
+            let (own, other) = ("a".repeat(64), "b".repeat(64));
+            for (consent, actor, replaced_by, request) in [
+                ("self", target.as_str(), None, own.as_str()),
+                (
+                    "admin",
+                    admin.as_str(),
+                    Some(successor.as_str()),
+                    other.as_str(),
+                ),
+            ] {
+                assert!(state
+                    .db
+                    .archive(
+                        tenant.community(),
+                        &target,
+                        consent,
+                        actor,
+                        None,
+                        replaced_by,
+                        request,
+                    )
+                    .await
+                    .expect("archive row"));
+            }
+            // The self request publishes only now, after the admin request
+            // replaced its row.
+            let request = DeltaRequest {
+                unarchive: false,
+                target_hex: &target,
+                consent_path: "self",
+                actor_hex: &target,
+                request_event_id: &own,
+                content: "self-written text",
+                reason: None,
+            };
+            settle_nipia_delta(&tenant, &state, &request, true)
+                .await
+                .expect("delta settles");
+            let latest = latest_nipia_delta(&tenant, &state, &target)
+                .await
+                .expect("latest delta")
+                .expect("a delta");
+            let e = latest.tags.iter().find_map(|tag| {
+                let fields = tag.as_slice();
+                (fields.first().map(String::as_str) == Some("e"))
+                    .then(|| fields.get(1).cloned())
+                    .flatten()
+            });
+            assert_eq!(e.as_deref(), Some(other.as_str()));
+            assert_eq!(
+                latest.content, "",
+                "the admin's delta must not carry the self request's text"
             );
         }
 
