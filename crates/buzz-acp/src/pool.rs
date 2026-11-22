@@ -3161,7 +3161,10 @@ pub async fn run_prompt_task(
     // 💬 — fire-and-forget so the prompt fires immediately.
     // The guard's cleanup (spawned on drop) removes 💬 after the turn completes.
     // A brief race where 💬 appears slightly after the agent starts is acceptable.
-    if !reaction_ids.is_empty() {
+    // Hosts that already show their own "working" signal (a typing indicator)
+    // can turn 💬 off with BUZZ_ACP_WORKING_REACTION=off, so each message gets
+    // a single 👀 and a single notification.
+    if !reaction_ids.is_empty() && working_reaction_enabled() {
         let rest = ctx.rest_client.clone();
         let ids = reaction_ids.clone();
         tokio::spawn(async move {
@@ -5054,7 +5057,8 @@ fn record_scope_delivery_success(
 //
 // Two-phase lifecycle visible to users:
 //   👀  "seen"    — event was queued and an agent will handle it
-//   💬  "working" — agent is actively prompting
+//   💬  "working" — agent is actively prompting (off with
+//                    BUZZ_ACP_WORKING_REACTION=off)
 //
 // 💬 is awaited inline in `run_prompt_task` before the prompt fires, so
 // add-before-remove ordering is structural. 👀 is fire-and-forget from
@@ -5649,6 +5653,39 @@ pub(crate) async fn reaction_remove(rest: &crate::relay::RestClient, event_id: &
 /// Maximum concurrent reaction HTTP requests per fan-out call.
 /// Prevents unbounded parallelism when a large batch of events arrives.
 const REACTION_CONCURRENCY: usize = 10;
+
+/// Whether to add the 💬 "working" reaction. On unless `BUZZ_ACP_WORKING_REACTION`
+/// is `0`, `false`, `off` or `no` (any case). 👀 and the cleanup of both are unaffected.
+fn working_reaction_enabled() -> bool {
+    working_reaction_setting(std::env::var("BUZZ_ACP_WORKING_REACTION").ok().as_deref())
+}
+
+fn working_reaction_setting(value: Option<&str>) -> bool {
+    !matches!(
+        value.map(|v| v.trim().to_ascii_lowercase()).as_deref(),
+        Some("0" | "false" | "off" | "no")
+    )
+}
+
+#[cfg(test)]
+mod working_reaction_tests {
+    use super::working_reaction_setting;
+
+    #[test]
+    fn working_reaction_is_on_by_default() {
+        assert!(working_reaction_setting(None));
+        assert!(working_reaction_setting(Some("")));
+        assert!(working_reaction_setting(Some("1")));
+        assert!(working_reaction_setting(Some("on")));
+    }
+
+    #[test]
+    fn working_reaction_can_be_turned_off() {
+        for value in ["0", "false", "off", "no", "OFF", " False "] {
+            assert!(!working_reaction_setting(Some(value)), "{value}");
+        }
+    }
+}
 
 /// Add 💬 to all events, capped at `REACTION_CONCURRENCY` concurrent requests.
 /// Awaited inline before the prompt fires.
