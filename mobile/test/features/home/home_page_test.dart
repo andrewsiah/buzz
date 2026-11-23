@@ -10,6 +10,7 @@ import 'package:buzz/features/agents/agents_page.dart';
 import 'package:buzz/features/channels/me/me_section.dart';
 import 'package:buzz/features/activity/activity_page.dart';
 import 'package:buzz/features/activity/inbox_unread_provider.dart';
+import 'package:buzz/features/catch_up/catch_up_page.dart';
 import 'package:buzz/features/channels/channel.dart';
 import 'package:buzz/features/channels/channel_detail_page.dart';
 import 'package:buzz/features/profile/profile_edit_page.dart';
@@ -995,6 +996,17 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('$platform Catch up row opens Catch-up', (tester) async {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await tester.pumpWidget(await buildHome());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('home-catch-up-row')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CatchUpPage), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
     testWidgets('$platform scrolled bell opens Activity', (tester) async {
       debugDefaultTargetPlatformOverride = platform;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);

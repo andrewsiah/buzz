@@ -24,6 +24,8 @@ import '../../shared/widgets/bottom_up_page_route.dart';
 import '../../shared/widgets/mobile_tab_footer_backdrop.dart';
 import '../activity/activity_page.dart';
 import '../activity/inbox_unread_provider.dart';
+import '../catch_up/catch_up_entry_row.dart';
+import '../catch_up/catch_up_page.dart';
 import '../channels/channels_page.dart';
 import '../search/search_page.dart';
 import 'home_screen_shortcut_host.dart';
@@ -131,8 +133,18 @@ class HomePage extends HookConsumerWidget {
         reducedMotion: reducedMotion,
       ),
     );
+    void openCatchUp() => Navigator.of(context).push(
+      BottomUpPageRoute<void>(
+        builder: (_) => AdaptiveConversationDestination(
+          preferredListWidth: sidebarWidth,
+          child: const CatchUpPage(),
+        ),
+        reducedMotion: reducedMotion,
+      ),
+    );
     final messages = ChannelsPage(
       settingsPageBuilder: settingsPageBuilder,
+      leading: CatchUpEntryRow(onOpen: openCatchUp),
       messagesActionsWidth:
           2 * (defaultTargetPlatform == TargetPlatform.iOS ? 44 : 48) + Grid.xs,
       messagesActionsBuilder: (openSwitcher, avatarKey) {

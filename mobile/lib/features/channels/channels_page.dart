@@ -139,6 +139,7 @@ class ChannelsPage extends HookConsumerWidget {
     this.newChannelAction,
     this.newDmAction,
     this.onInbox,
+    this.leading,
     this.communityInvitePageBuilder,
     this.communityAppearancePageBuilder,
     required this.onSettingsTransitionProgress,
@@ -164,6 +165,9 @@ class ChannelsPage extends HookConsumerWidget {
 
   /// Opens the conversation inbox above the channel sections.
   final VoidCallback? onInbox;
+
+  /// A row shown above the channel sections, such as Home's Catch up entry.
+  final Widget? leading;
 
   /// Builds the invite destination opened from the community sheet.
   final WidgetBuilder? communityInvitePageBuilder;
@@ -668,6 +672,7 @@ class ChannelsPage extends HookConsumerWidget {
         showTeam: showTeam,
         showTeamHeading: showTeamHeading,
         onInbox: onInbox,
+        leading: leading,
         onReadyChanged: (ready) => bodyReady.value = ready,
         channels: channels,
         channelsAsync: channelsAsync,

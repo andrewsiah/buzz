@@ -5,6 +5,7 @@ class _ChannelsBody extends StatelessWidget {
   final bool showTeam;
   final bool showTeamHeading;
   final VoidCallback? onInbox;
+  final Widget? leading;
   final List<Channel>? channels;
   final AsyncValue<List<Channel>> channelsAsync;
   final bool showError;
@@ -22,6 +23,7 @@ class _ChannelsBody extends StatelessWidget {
     this.showTeam = true,
     this.showTeamHeading = false,
     required this.onInbox,
+    this.leading,
     required this.channels,
     required this.channelsAsync,
     required this.showError,
@@ -106,6 +108,13 @@ class _ChannelsBody extends StatelessWidget {
                   SliverPadding(
                     padding: const EdgeInsets.only(top: Grid.twelve),
                     sliver: SliverToBoxAdapter(child: inbox),
+                  ),
+                if (leading case final leading?)
+                  SliverPadding(
+                    padding: EdgeInsets.only(
+                      top: onInbox == null ? Grid.twelve : 0,
+                    ),
+                    sliver: SliverToBoxAdapter(child: leading),
                   ),
                 if (soloSliver != null && showTeamHeading)
                   SliverToBoxAdapter(
