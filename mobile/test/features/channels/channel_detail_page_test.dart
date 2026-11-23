@@ -5207,7 +5207,8 @@ void main() {
       );
       expect(_previewRowAvatarInitial(tester, 'self'), 'Y');
 
-      await tester.ensureVisible(seeAllRow);
+      // Centred, so the frosted app bar over the list's top can't cover it.
+      await Scrollable.ensureVisible(tester.element(seeAllRow), alignment: 0.5);
       await tester.pumpAndSettle();
       await tester.tap(seeAllRow);
       await tester.pumpAndSettle();

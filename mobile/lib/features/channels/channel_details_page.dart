@@ -429,6 +429,21 @@ class ChannelDetailsPage extends HookConsumerWidget {
           ),
           SheetActionSection(
             children: [
+              for (final feature in SnackWebFeature.values)
+                action(
+                  feature.label,
+                  snackWebFeatureIcon(feature),
+                  () => openSnackWebChannel(
+                    context,
+                    ref,
+                    channelId: resolvedChannel.id,
+                    feature: feature,
+                  ),
+                ),
+            ],
+          ),
+          SheetActionSection(
+            children: [
               if (canJoin)
                 action(
                   isJoining.value ? 'Joining channel…' : 'Join channel',
@@ -813,6 +828,10 @@ class ChannelDetailsPage extends HookConsumerWidget {
               ],
             ],
           ),
+        SnackWebChannelSection(
+          channelId: resolvedChannel.id,
+          verticalPadding: _channelDetailsSectionPadding,
+        ),
       ],
     );
     if (inSheet) return content;

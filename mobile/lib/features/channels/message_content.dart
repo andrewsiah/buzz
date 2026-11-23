@@ -21,7 +21,6 @@ import 'package:buzz/shared/theme/buzz_icons.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/clipboard_utils.dart';
 import '../../shared/widgets/media_loading_placeholder.dart';
@@ -34,6 +33,9 @@ import '../../shared/deeplink/pending_deep_link_provider.dart';
 import '../../shared/relay/relay.dart';
 import '../../shared/syntax_highlight.dart';
 import '../../shared/theme/theme.dart';
+import '../../shared/snack_web/snack_web_launcher.dart';
+import '../../shared/snack_web/snack_web_links.dart';
+import '../../shared/snack_web/snack_web_only_block.dart';
 import '../../shared/custom_emoji/custom_emoji.dart';
 import '../../shared/custom_emoji/custom_emoji_provider.dart';
 import '../../shared/custom_emoji/custom_emoji_render.dart';
@@ -449,12 +451,19 @@ class MessageContent extends HookConsumerWidget {
           autolink: false,
           // Desktop has no GitHub alerts: a `> [!NOTE]` quote stays a quote.
           alertBuilder: (_, alert) => alert.asBlockQuote(),
-          codeBuilder: (context, name, code, closed) => _MessageCodeBlock(
-            name: name,
-            code: code,
-            bubble: bubble,
-            ink: bubble && ownMessage ? ownTextColor : null,
-          ),
+          codeBuilder: (context, name, code, closed) =>
+              switch (snackWebOnlyFenceLabel(name, code)) {
+                final label? => SnackWebOnlyBlock(
+                  label: label,
+                  ink: bubble && ownMessage ? ownTextColor : null,
+                ),
+                null => _MessageCodeBlock(
+                  name: name,
+                  code: code,
+                  bubble: bubble,
+                  ink: bubble && ownMessage ? ownTextColor : null,
+                ),
+              },
           // Chips, media links and taps are handled in _buildLink, so the
           // package's own tap is not used.
           inlineLinkBuilder: (link) => _buildLink(
@@ -795,8 +804,11 @@ class MessageContent extends HookConsumerWidget {
     }
 
     Future<void> openLink() async {
-      final uri = Uri.tryParse(url);
-      if (uri == null) return;
+      final parsed = Uri.tryParse(url);
+      if (parsed == null) return;
+      // A Snack web link to a channel or message here opens natively.
+      final relay = ref.read(relayConfigProvider).baseUrl;
+      final uri = snackWebNativeLink(parsed, relayBaseUrl: relay) ?? parsed;
 
       // Rendered channel URLs must use the same callback as `#channel`
       // references so detail-page callers can suppress self-navigation.
@@ -815,7 +827,7 @@ class MessageContent extends HookConsumerWidget {
 
       final auth = ref.read(mediaGetAuthServiceProvider);
       if (!auth.isRelayMediaUrl(url)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        await ref.read(webLinkLauncherProvider)(uri);
         return;
       }
 
