@@ -6,9 +6,9 @@ SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEBUG
 // without patching tracked files by writing
 // `mobile/ios/Flutter/AppOverrides.xcconfig` containing
 // `BUNDLE_IDENTIFIER = your.app.id` (gitignored).
-BUNDLE_IDENTIFIER = xyz.block.buzz.dev.mobile
-APP_DISPLAY_NAME = Buzz
-BUZZ_DEVELOPMENT_TEAM = JMTDPW9CG3
+BUNDLE_IDENTIFIER = app.wesnack.ios
+APP_DISPLAY_NAME = Snack
+BUZZ_DEVELOPMENT_TEAM = FG23GT4B3L
 
 // Push support is always present in the iOS artifact. The current relay's
 // fully validated NIP-11 descriptor is the runtime activation authority.
