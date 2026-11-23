@@ -7,7 +7,7 @@ import 'features/agents/agents_page.dart';
 import 'dart:async';
 
 import 'hosted_app_gate.dart';
-import 'onboarding_app_entry.dart';
+import 'snack_app_entry.dart';
 import 'organization_app_entry.dart';
 import 'shared/share/signed_out_share_notice.dart';
 import 'shared/hosted/organization_environment.dart';
@@ -464,7 +464,7 @@ class App extends HookConsumerWidget {
         ),
         _ => const HostedAppGate(
           authenticated: false,
-          child: SignedOutShareNotice(child: OnboardingAppEntry()),
+          child: SignedOutShareNotice(child: SnackAppEntry()),
         ),
       },
     );

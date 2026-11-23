@@ -40,7 +40,7 @@ final class BuzzBrowserAuthBridge: NSObject, ASWebAuthenticationPresentationCont
       self.pending = result
       let attemptID = UUID()
       self.attemptID = attemptID
-      let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "xyz.block.buzz.mobile") { [weak self] callback, error in
+      let session = ASWebAuthenticationSession(url: url, callbackURLScheme: Self.callbackScheme(for: url)) { [weak self] callback, error in
         DispatchQueue.main.async {
           guard self?.attemptID == attemptID else { return }
           let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
@@ -58,12 +58,21 @@ final class BuzzBrowserAuthBridge: NSObject, ASWebAuthenticationPresentationCont
     }
   }
 
+  /// Snack's Google sign-in returns to its own `wesnack://` scheme.
+  static let snackHosts = ["wesnack.app"]
+
+  static func callbackScheme(for url: URL) -> String {
+    snackHosts.contains(url.host?.lowercased() ?? "") ? "wesnack" : "xyz.block.buzz.mobile"
+  }
+
   /// Builderlab login pages only: the public account's `/auth/native`, and a
-  /// tenant's CLI login on its own host for organization sign-in.
+  /// tenant's CLI login on its own host for organization sign-in. Snack's
+  /// Google start page is the one other allowed login.
   static func allowsLogin(_ url: URL) -> Bool {
     guard url.scheme == "https", let host = url.host?.lowercased(),
       url.user == nil, url.password == nil, url.port == nil, url.fragment == nil
     else { return false }
+    if snackHosts.contains(host) { return url.path == "/api/auth/google/start" }
     let publicHosts = ["app.builderlab.xyz", "app.builderlabstaging.xyz"]
     if publicHosts.contains(host) { return url.path == "/auth/native" }
     let tenant = ["builderlab.xyz", "builderlabstaging.xyz"].contains { domain in

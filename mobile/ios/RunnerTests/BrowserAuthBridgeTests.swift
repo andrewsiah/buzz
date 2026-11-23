@@ -49,6 +49,7 @@ final class BrowserAuthBridgeTests: XCTestCase {
       "https://app.builderlabstaging.xyz/auth/native",
       "https://block.builderlab.xyz/api/goose/v1/auth/login?type=cli",
       "https://block.builderlabstaging.xyz/api/goose/v1/auth/login",
+      "https://wesnack.app/api/auth/google/start?app=c",
     ] {
       XCTAssertTrue(BuzzBrowserAuthBridge.allowsLogin(URL(string: allowed)!), allowed)
     }
@@ -64,9 +65,18 @@ final class BrowserAuthBridgeTests: XCTestCase {
       "https://app.builderlab.xyz:8443/auth/native",
       "https://user@app.builderlab.xyz/auth/native",
       "https://app.builderlab.xyz/auth/native#fragment",
+      "https://wesnack.app/api/me",
+      "https://evil.wesnack.app/api/auth/google/start",
+      "http://wesnack.app/api/auth/google/start",
     ] {
       XCTAssertFalse(BuzzBrowserAuthBridge.allowsLogin(URL(string: refused)!), refused)
     }
+    XCTAssertEqual(
+      BuzzBrowserAuthBridge.callbackScheme(for: URL(string: "https://wesnack.app/api/auth/google/start")!),
+      "wesnack")
+    XCTAssertEqual(
+      BuzzBrowserAuthBridge.callbackScheme(for: URL(string: "https://app.builderlab.xyz/auth/native")!),
+      "xyz.block.buzz.mobile")
   }
 }
 

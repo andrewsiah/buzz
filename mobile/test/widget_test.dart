@@ -83,7 +83,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('App renders pairing page when unauthenticated', (
+  testWidgets('App renders Snack sign-in, then pairing, when unauthenticated', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -100,6 +100,12 @@ void main() {
       ),
     );
     await tester.pump();
+    if (!HostedEnvironment.enabled) {
+      expect(find.text('Sign in to Snack'), findsOneWidget);
+      expect(find.text('Scan a QR code'), findsNothing);
+      await tester.tap(find.text('Other ways to join'));
+      await tester.pump();
+    }
     expect(find.bySemanticsLabel('Buzz'), findsOneWidget);
     expect(find.text('Sign in with email').hitTestable(), findsNothing);
     expect(
@@ -107,6 +113,11 @@ void main() {
       HostedEnvironment.enabled ? findsOneWidget : findsNothing,
     );
     expect(find.text('Scan a QR code'), findsOneWidget);
+    if (!HostedEnvironment.enabled) {
+      await tester.tap(find.text('Snack sign-in'));
+      await tester.pump();
+      expect(find.text('Sign in to Snack'), findsOneWidget);
+    }
   });
 }
 
