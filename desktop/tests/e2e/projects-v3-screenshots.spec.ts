@@ -253,7 +253,7 @@ test("restricted repositories keep event work visible and offer access help", as
   await expect(chatPanel.getByTestId("message-composer")).toBeVisible();
 });
 
-test("repository pages show a centered Buzz loader while fetching", async ({
+test("repository pages show a centered cookie loader while fetching", async ({
   page,
 }) => {
   await installMockBridge(page, { projectRepoSnapshotDelayMs: 750 });
@@ -264,12 +264,8 @@ test("repository pages show a centered Buzz loader while fetching", async ({
   await expect(
     loader.getByRole("img", { name: "Loading repository" }),
   ).toBeVisible();
-  const animatedMark = loader.locator(".buzz-logo__mark");
-  await expect(animatedMark).toHaveCSS(
-    "animation-name",
-    "buzz-logo-scale-pulse",
-  );
-  await expect(animatedMark).toHaveCSS("opacity", "1");
+  const cookie = loader.locator(".cookie-loader__cookie");
+  await expect(cookie).toHaveCSS("animation-name", "cookie-loader-eat");
   await expect(loader).toHaveCSS("justify-content", "center");
   await expect(loader).toBeHidden({ timeout: 5_000 });
 });

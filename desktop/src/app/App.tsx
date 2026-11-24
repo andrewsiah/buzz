@@ -75,9 +75,7 @@ import {
   listenForDeepLinks,
 } from "@/shared/deep-link";
 import { cn } from "@/shared/lib/cn";
-import { BuzzMark } from "@/shared/ui/buzz-logo/BuzzMark";
-import { FlappingBee } from "@/shared/ui/buzz-logo/FlappingBee";
-import { FuzzyLogo } from "@/shared/ui/buzz-logo/FuzzyLogo";
+import { CookieLoadingMark } from "@/shared/ui/CookieLoadingMark";
 import { StartupWindowDragRegion } from "@/shared/ui/StartupWindowDragRegion";
 
 const LOADING_TEXT = "Setting up your community...";
@@ -141,38 +139,9 @@ function useBootSplashHold(): BootSplashPhase {
   return phase;
 }
 
-// Animated Buzz mark for the loading gates. The static BuzzMark renders in
-// normal flow and sizes the box — it's plain SVG (no JS/SMIL), so it paints on
-// the very first frame even before scripting starts, avoiding a blank flash on
-// hard reload. The animated FuzzyLogo is layered on top and takes over once it
-// begins playing.
-function BeeLoader({
-  ariaLabel,
-  className,
-  tintClassName = "text-foreground",
-}: {
-  ariaLabel: string;
-  className?: string;
-  tintClassName?: string;
-}) {
-  return (
-    <div className={cn("relative", tintClassName, className)}>
-      <BuzzMark className="block h-auto w-full" />
-      <FuzzyLogo
-        ariaLabel={ariaLabel}
-        className="absolute inset-0 h-full! w-full! [&>svg]:h-full [&>svg]:w-full [&>svg]:max-w-full"
-        fuzz
-        loop
-        loopRestSeconds={0}
-      />
-    </div>
-  );
-}
-
-// Cold boot gate: the theme-adaptive grainient background with a single
-// centered Buzz bee flying over it — the same static mark as before, now with
-// its wings flapping (ported from the Buzz website's wing-flap). Replaces the
-// old "Setting up your community" text, which stays as an sr-only caption.
+// Cold boot gate: the theme-adaptive grainient background with the loading
+// cookie centered over it. The "Setting up your community" text stays as an
+// sr-only caption.
 function AppLoadingGate() {
   return (
     <div
@@ -183,7 +152,7 @@ function AppLoadingGate() {
       <StartupWindowDragRegion />
       <ThemeGrainientBackground />
       <span className="sr-only">{LOADING_TEXT}</span>
-      <FlappingBee className="relative z-10 h-auto w-28" />
+      <CookieLoadingMark className="relative z-10 w-28" />
     </div>
   );
 }
@@ -206,13 +175,7 @@ function CommunitySwitchGate() {
     >
       <StartupWindowDragRegion />
       <span className="sr-only">Switching community…</span>
-      {showSpinner ? (
-        <BeeLoader
-          ariaLabel="Switching community…"
-          className="h-auto w-20"
-          tintClassName="text-muted-foreground"
-        />
-      ) : null}
+      {showSpinner ? <CookieLoadingMark className="w-20" /> : null}
     </div>
   );
 }
