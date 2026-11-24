@@ -234,6 +234,53 @@ void main() {
       },
     );
 
+    test('a message sent right after resume waits for the reconnect and goes '
+        'out; while backgrounded it fails at once', () async {
+      final h = await _Harness.start();
+      h.sockets.last.connectSuccessfully();
+      await h.settle();
+      NostrEvent event(String id) => NostrEvent(
+        id: id,
+        pubkey: 'alice',
+        createdAt: h.nowSeconds,
+        kind: EventKind.streamMessageV2,
+        tags: const [
+          ['h', 'channel'],
+        ],
+        content: 'hello',
+        sig: 'sig',
+      );
+      bool sentEvent(String id) => h.sockets.any(
+        (socket) => socket.sent.any(
+          (frame) => frame[0] == 'EVENT' && (frame[1] as Map)['id'] == id,
+        ),
+      );
+
+      h.session.onAppPaused();
+      h.session.debugPauseNow();
+      // Backgrounded: no reconnect is coming, so the send fails at once.
+      await expectLater(
+        h.session
+            .publish(event('while-paused'))
+            .timeout(const Duration(seconds: 1)),
+        throwsA(isA<StateError>()),
+      );
+
+      h.now = h.now.add(const Duration(minutes: 10));
+      h.session.onAppResumed();
+      await h.settle();
+      // The user taps send before the new socket has authenticated.
+      final send = h.session.publish(event('after-resume'));
+      await h.settle();
+      expect(sentEvent('after-resume'), isFalse);
+      h.sockets.last.connectSuccessfully();
+      await h.settle();
+      expect(sentEvent('after-resume'), isTrue);
+      h.receive(['OK', 'after-resume', true, '']);
+      expect((await send).id, 'after-resume');
+      expect(sentEvent('while-paused'), isFalse);
+    });
+
     test('a later connection that never reaches EOSE keeps the older cursor, '
         'then advances once live again', () async {
       final h = await _Harness.start();

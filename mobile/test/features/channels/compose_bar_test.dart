@@ -1390,6 +1390,10 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'new draft',
       );
+      // An ordinary StateError (a dropped connection, an unverified chat) is
+      // reported as itself; only a real community switch says so.
+      expect(find.widgetWithText(SnackBar, 'relay rejected'), findsOneWidget);
+      expect(find.text('Not sent. Community changed.'), findsNothing);
     });
 
     testWidgets('smoothly resizes the text field when a new line is added', (

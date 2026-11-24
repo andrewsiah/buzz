@@ -483,7 +483,10 @@ enum _NonMemberMentionChoice { invite, sendWithoutInviting }
 /// User-facing text for a failed add or send.
 String _composeSendErrorMessage(Object error) {
   if (error is AddMembersException) return error.message;
-  return error.toString().replaceFirst('Exception: ', '');
+  return error
+      .toString()
+      .replaceFirst('Exception: ', '')
+      .replaceFirst('Bad state: ', '');
 }
 
 /// Ask whether to invite mentioned humans who aren't channel members, or
@@ -573,10 +576,14 @@ void _sendTypingIndicator(
 
 /// Reports a send that was cancelled because the active community changed.
 ///
-/// The send path is fire-and-forget, so a `StateError` escaping it would be
-/// silent. The composer's own error line cannot carry this message either: the
-/// identity change that causes the failure also resets that state on the next
-/// frame, so [messenger] must be resolved before the send's first `await`.
+/// Only a [CommunityChangedError] means this: any other [StateError] (a dropped
+/// connection, an unverified chat) is reported as itself.
+///
+/// The send path is fire-and-forget, so a `CommunityChangedError` escaping it
+/// would be silent. The composer's own error line cannot carry this message
+/// either: the identity change that causes the failure also resets that state
+/// on the next frame, so [messenger] must be resolved before the send's first
+/// `await`.
 void _reportSendCancelledByCommunitySwitch(ScaffoldMessengerState? messenger) {
   messenger?.showFeedbackSnackBar(
     const SnackBar(content: Text('Not sent. Community changed.')),
@@ -601,8 +608,9 @@ class _NonMemberAddOutcome {
 /// after they have been explicitly invited from the mention prompt.
 ///
 /// A rejection is reported, never thrown: the send is fire-and-forget, so an
-/// escaping error would drop the message with nothing shown. [StateError] still
-/// propagates — a community switch must cancel the whole send.
+/// escaping error would drop the message with nothing shown.
+/// [CommunityChangedError] still propagates — a community switch must cancel
+/// the whole send.
 Future<_NonMemberAddOutcome> _addMentionedNonMembers(
   ChannelActions channelActions, {
   required String channelId,
@@ -634,7 +642,7 @@ Future<_NonMemberAddOutcome> _addMentionedNonMembers(
         pubkeys: pubkeys,
         role: role,
       );
-    } on StateError {
+    } on CommunityChangedError {
       rethrow;
     } catch (error) {
       notAdded.addAll(

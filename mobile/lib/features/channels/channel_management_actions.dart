@@ -231,7 +231,7 @@ class ChannelActions {
 
   void _ensureCommunityValid() {
     if (_isCommunityValid?.call() == false) {
-      throw StateError(
+      throw CommunityChangedError(
         'Channel action cancelled because the active community changed',
       );
     }
