@@ -6,6 +6,10 @@
 	<string>$(BUZZ_APP_GROUP_IDENTIFIER)</string>
 	<key>BuzzKeychainAccessGroup</key>
 	<string>$(AppIdentifierPrefix)$(BUZZ_KEYCHAIN_ACCESS_GROUP)</string>
+	<key>SnackAgeRangeEnabled</key>
+	<string>$(SNACK_AGE_RANGE_ENABLED)</string>
+	<key>SnackPushEnabled</key>
+	<string>$(SNACK_PUSH_ENABLED)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

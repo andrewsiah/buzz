@@ -16,4 +16,11 @@ BUZZ_APP_GROUP_IDENTIFIER = group.$(BUNDLE_IDENTIFIER)
 BUZZ_KEYCHAIN_ACCESS_GROUP = $(BUNDLE_IDENTIFIER)
 BUZZ_IOS_PUSH_ENVIRONMENT = production
 BUZZ_APP_ATTEST_ENVIRONMENT = production
+
+// SNACK: capabilities Runner.entitlements grants. The first TestFlight has
+// no push (aps-environment) or declared-age-range entitlement, so the app
+// must not call those APIs. Set YES (or delete the line) once the
+// entitlement is back; an unset value keeps Buzz's behaviour (enabled).
+SNACK_PUSH_ENABLED = NO
+SNACK_AGE_RANGE_ENABLED = NO
 #include? "AppOverrides.xcconfig"

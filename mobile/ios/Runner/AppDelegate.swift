@@ -437,6 +437,9 @@ import os.log
   @MainActor
   private static func platformAgeSignal(_ viewController: UIViewController) async throws -> [String: Any] {
     guard #available(iOS 26.0, *) else { return noAgeSignalResponse }
+    // SNACK: without the declared-age-range entitlement the API may end the
+    // process instead of throwing, so a build without it reports no signal.
+    guard Self.capabilityEnabled("SnackAgeRangeEnabled") else { return noAgeSignalResponse }
     let response = try await AgeRangeService.shared.requestAgeRange(ageGates: 18, in: viewController)
     switch response {
     case .declinedSharing:
@@ -703,7 +706,23 @@ import os.log
     }
   }
 
+  /// SNACK: whether the build's entitlements include a capability, from the
+  /// Info.plist flag its xcconfig sets. Only an explicit NO disables it, so
+  /// builds without the flag keep Buzz's behaviour.
+  static func capabilityEnabled(_ key: String) -> Bool {
+    let value = (Bundle.main.object(forInfoDictionaryKey: key) as? String)?
+      .trimmingCharacters(in: .whitespaces).uppercased()
+    return value != "NO"
+  }
+
   private func startPushRegistration(result: @escaping FlutterResult) {
+    // SNACK: with no aps-environment entitlement there is no APNs token to
+    // get, so don't ask for notification permission or register at all.
+    guard Self.capabilityEnabled("SnackPushEnabled") else {
+      os_log("Push is not enabled in this build; skipping registration.")
+      result(nil)
+      return
+    }
     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) {
       _, error in
       if let error {

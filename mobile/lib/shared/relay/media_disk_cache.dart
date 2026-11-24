@@ -327,19 +327,28 @@ const _appGroupChannel = MethodChannel('buzz/app_group');
 
 /// The directory community caches live under: the shared app group's caches
 /// on iOS, so app extensions can read them, and the app's cache directory
-/// elsewhere. Null when the iOS app group is unavailable.
-Future<Directory?> resolveMediaCacheRoot() async {
-  if (!Platform.isIOS) return getApplicationCacheDirectory();
-  final path = await _appGroupChannel.invokeMethod<String>('cachesDirectory');
+/// elsewhere, or on iOS when the build has no app group (extensions then
+/// can't read the cache, but the app still keeps it).
+Future<Directory?> resolveMediaCacheRoot({
+  bool? isIOS,
+  Future<String?> Function()? appGroupCaches,
+  Future<Directory> Function()? appCaches,
+}) async {
+  final ownCaches = appCaches ?? getApplicationCacheDirectory;
+  if (!(isIOS ?? Platform.isIOS)) return ownCaches();
+  final path = await (appGroupCaches ?? _appGroupCachesDirectory)();
   if (path == null) {
-    debugPrint('[MediaDiskCache] no app group container; disk cache is off');
-    return null;
+    debugPrint('[MediaDiskCache] no app group container; using app caches');
+    return ownCaches();
   }
   return Directory(path);
 }
 
+Future<String?> _appGroupCachesDirectory() =>
+    _appGroupChannel.invokeMethod<String>('cachesDirectory');
+
 /// The caches root, overridden at startup with [resolveMediaCacheRoot]. Null
-/// (isolated tests, or no app group) turns the disk cache off. Startup does
+/// (isolated tests, or no caches directory) turns the disk cache off. Startup does
 /// not wait for it: images that load first skip the disk.
 final mediaCacheRootProvider = FutureProvider<Directory?>((ref) async => null);
 

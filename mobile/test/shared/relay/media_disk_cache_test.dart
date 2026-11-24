@@ -53,6 +53,30 @@ void main() {
 
   tearDown(() => root.delete(recursive: true));
 
+  test('iOS keeps a disk cache without an app group', () async {
+    final group = Directory(p.join(root.path, 'group'));
+    final own = Directory(p.join(root.path, 'own'));
+    Future<Directory?> resolve({required bool isIOS, String? groupPath}) =>
+        resolveMediaCacheRoot(
+          isIOS: isIOS,
+          appGroupCaches: () async => groupPath,
+          appCaches: () async => own,
+        );
+
+    // The shared app group's caches when the build has the group...
+    expect(
+      (await resolve(isIOS: true, groupPath: group.path))?.path,
+      group.path,
+    );
+    // ...the app's own caches when it doesn't, instead of no disk cache...
+    expect((await resolve(isIOS: true))?.path, own.path);
+    // ...and always the app's own caches off iOS.
+    expect(
+      (await resolve(isIOS: false, groupPath: group.path))?.path,
+      own.path,
+    );
+  });
+
   test('images load from disk after a relaunch, and only stale external '
       'ones are refetched', () async {
     final fetched = <String>[];
