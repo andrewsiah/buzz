@@ -61,6 +61,14 @@ class _MessageBubble extends HookConsumerWidget {
     // Watch only this user's profile to avoid rebuilding on unrelated cache changes.
     final pk = message.pubkey.toLowerCase();
     final ownMessage = currentPubkey?.toLowerCase() == pk;
+    final choiceSender = SnackChoiceScope.maybeOf(context);
+    final SnackChoiceAnswer? answerChoice = choiceSender == null || ownMessage
+        ? null
+        : (option) => choiceSender(
+            option: option,
+            authorPubkey: message.pubkey,
+            rootId: message.rootId,
+          );
     final showSenderIdentity = showMessageAuthorName(
       ref,
       currentChannelId,
@@ -350,6 +358,8 @@ class _MessageBubble extends HookConsumerWidget {
                                       key: swipeContentKey,
                                       content: message.content,
                                       edited: message.edited,
+                                      choiceKey: message.id,
+                                      onChoice: answerChoice,
                                       bubble: true,
                                       additionalTextWidth:
                                           !ownMessage && !showSenderIdentity
