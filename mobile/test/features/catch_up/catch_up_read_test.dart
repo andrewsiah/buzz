@@ -73,6 +73,9 @@ class FakeReader implements CatchUpReader {
 
   @override
   List<String> timelineMentions(String channelId) => mentions;
+
+  @override
+  void flush() => calls['flush'] = const [];
 }
 
 CatchUpEntry entry({

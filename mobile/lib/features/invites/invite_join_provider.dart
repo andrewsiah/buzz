@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -13,6 +14,7 @@ import '../../shared/deeplink/deep_link.dart';
 import '../../shared/relay/relay_provider.dart';
 import '../../shared/relay/relay_session.dart';
 import '../../shared/relay/relay_validation.dart';
+import '../../shared/snack/snack_account.dart';
 
 final inviteJoinHttpClientProvider = Provider<http.Client>((ref) {
   final client = ref.watch(hostedHttpClientFactoryProvider)();
@@ -219,11 +221,17 @@ class InviteJoinNotifier extends Notifier<InviteJoinState> {
       }
 
       final storage = ref.read(communityStorageProvider);
-      final nsec = await storage.pendingInviteIdentity(
-        invite.relayUrl,
-        invite.code,
-        () => ref.read(inviteKeyGeneratorProvider)().nsec,
-      );
+      // Signed in to Snack: join as the Snack account, like Snack on the web,
+      // so the next sign-in on any device finds this community.
+      final snack = ref.read(snackAccountProvider);
+      final snackNsec = await snack.accountNsecAmong(await storage.loadAll());
+      final nsec =
+          snackNsec ??
+          await storage.pendingInviteIdentity(
+            invite.relayUrl,
+            invite.code,
+            () => ref.read(inviteKeyGeneratorProvider)().nsec,
+          );
       final decodedKey = nostr.Nip19.decode(payload: nsec);
       if (decodedKey.prefix != nostr.Nip19Prefix.nsec) {
         throw const FormatException('Pending invite identity is unreadable');
@@ -277,6 +285,9 @@ class InviteJoinNotifier extends Notifier<InviteJoinState> {
           .read(authProvider.notifier)
           .authenticateWithCommunity(community);
       await _retirePendingInvite(invite, community);
+      if (snackNsec != null) {
+        unawaited(_recordOnSnack(snack, invite.relayUrl));
+      }
       _pendingStarterSetupCommunity = community;
       state = state.copyWith(isStarterSetupRecovery: true);
       await startStarterSetupRecovery();
@@ -291,6 +302,21 @@ class InviteJoinNotifier extends Notifier<InviteJoinState> {
         ),
       );
     }
+  }
+
+  /// Reports the join to the Snack account. Best effort: the membership is
+  /// on the relay either way, and a failure only means the next Snack sign-in
+  /// on another device won't list it until the web app reports it.
+  Future<void> _recordOnSnack(SnackAccount snack, String relayUrl) async {
+    final relay = Uri.parse(relayUrl);
+    if (relay.scheme != 'wss') return;
+    try {
+      await snack.recordCommunity(
+        SnackCommunity(
+          url: relay.replace(scheme: 'https', path: '').origin,
+        ),
+      );
+    } catch (_) {}
   }
 
   /// Opens the canonical invite so the user can accept the current join policy.

@@ -85,6 +85,9 @@ abstract interface class CatchUpReader {
 
   /// Unread top-level mentions of the viewer in [channelId].
   List<String> timelineMentions(String channelId);
+
+  /// Writes any reads still waiting (see `catchUpReadDelay`) now.
+  void flush();
 }
 
 /// Reads one card and nothing its other cards show; null when nothing was

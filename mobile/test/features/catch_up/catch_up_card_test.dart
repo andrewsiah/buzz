@@ -26,7 +26,7 @@ final launch = Channel(
 final author = 'b' * 64;
 
 /// Card content, from the same providers the app reads, faked at the seam.
-List<Override> cardOverrides() => [
+List<Override> cardOverrides({List<CatchUpMessage>? timeline}) => [
   catchUpEvidenceProvider.overrideWithValue(const {}),
   catchUpMuteProvider.overrideWithValue(
     CatchUpMuteControl(muted: const {}, setMuted: (_, _) {}),
@@ -37,21 +37,24 @@ List<Override> cardOverrides() => [
   ),
   catchUpProfilesProvider.overrideWithValue(const {}),
   catchUpTimelineProvider.overrideWith(
-    (ref, _) => AsyncData([
-      CatchUpMessage(
-        id: 'root',
-        pubkey: author,
-        content: 'message root',
-        createdAt: 100,
-        replyCount: 2,
-      ),
-      CatchUpMessage(
-        id: 'later',
-        pubkey: author,
-        content: 'message later',
-        createdAt: 101,
-      ),
-    ]),
+    (ref, _) => AsyncData(
+      timeline ??
+          [
+            CatchUpMessage(
+              id: 'root',
+              pubkey: author,
+              content: 'message root',
+              createdAt: 100,
+              replyCount: 2,
+            ),
+            CatchUpMessage(
+              id: 'later',
+              pubkey: author,
+              content: 'message later',
+              createdAt: 101,
+            ),
+          ],
+    ),
   ),
   catchUpThreadProvider.overrideWith(
     (ref, args) => AsyncData([
@@ -91,6 +94,28 @@ Future<List<String>> pumpCard(WidgetTester tester, {String? rootId}) async {
 }
 
 void main() {
+  testWidgets('says so when a loaded conversation has nothing to show', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      WidgetHelpers.testable(
+        overrides: cardOverrides(timeline: const []),
+        child: CatchUpCard(
+          channel: launch,
+          channelId: 'launch',
+          entry: null,
+          newLineId: null,
+          viewer: 'a' * 64,
+          onOpen: (_, _, _) {},
+          onDecide: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Loading messages…'), findsNothing);
+    expect(find.textContaining('No messages to show'), findsOneWidget);
+  });
+
   testWidgets("shows a thread card's thread itself, not its channel", (
     tester,
   ) async {

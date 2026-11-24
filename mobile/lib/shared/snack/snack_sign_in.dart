@@ -177,12 +177,12 @@ class SnackSignInNotifier extends Notifier<SnackSignInState> {
     if (!joining) return;
     await _account.signOut();
     // Signed out means nothing usable is saved: drop what a failed attempt
-    // saved, so another account never inherits this one's communities.
-    final storage = ref.read(communityStorageProvider);
-    for (final community in await storage.loadAll()) {
-      await storage.remove(community.id);
+    // saved, so another account never inherits this one's communities. The
+    // list's own removal also closes sockets and clears snapshots.
+    final list = ref.read(communityListProvider.notifier);
+    for (final community in await ref.read(communityListProvider.future)) {
+      await list.removeCommunity(community.id);
     }
-    ref.invalidate(communityListProvider);
   }
 
   /// Signed in, but opening the communities failed: try that part again.
@@ -195,6 +195,7 @@ class SnackSignInNotifier extends Notifier<SnackSignInState> {
     state = state.copyWith(step: SnackSignInStep.joining, busy: true);
     try {
       final me = await _account.me();
+      await _account.rememberAccount(me.publicKey);
       final targets = [...me.communities];
       final fallback = me.defaultCommunity;
       if (targets.isEmpty && fallback != null) {

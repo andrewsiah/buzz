@@ -16,6 +16,7 @@ import 'package:buzz/features/channels/channel.dart';
 import 'package:buzz/features/invites/invite_join_provider.dart';
 import 'package:buzz/shared/auth/auth.dart';
 import 'package:buzz/shared/deeplink/deep_link.dart';
+import 'package:buzz/shared/snack/snack_account.dart';
 
 import '../../shared/community/community_storage_test.dart';
 
@@ -213,6 +214,89 @@ void main() {
         auth.authenticatedCommunities.single.sensitiveActionPolicy,
         SensitiveActionPolicy.disabledByUser,
       );
+    },
+  );
+
+  test(
+    'signed in to Snack: joins as the account key and records it on Snack',
+    () async {
+      final snackKeys = nostr.Keys.generate();
+      FlutterSecureStorage.setMockInitialValues({
+        'snack_session_v1': 'u.1.sig',
+        'snack_account_pubkey_v1': snackKeys.public,
+      });
+      final storage = CommunityStorage(secure: FakeSecureStorage());
+      await storage.save(
+        Community.create(
+          name: 'Snack',
+          relayUrl: 'wss://snack.example.org',
+          nsec: snackKeys.nsec,
+        ),
+      );
+      final recorded = <Object?>[];
+      final recordedOnce = Completer<void>();
+      String? claimPubkey;
+      final auth = _RecordingAuthNotifier();
+      final container = ProviderContainer(
+        overrides: [
+          communityStorageProvider.overrideWithValue(storage),
+          authProvider.overrideWith(() => auth),
+          inviteKeyGeneratorProvider.overrideWithValue(
+            () => fail('the Snack account key is used, not a new one'),
+          ),
+          inviteJoinRecoveryProvider.overrideWithValue(
+            (_) => _successfulRecovery(),
+          ),
+          snackAccountProvider.overrideWithValue(
+            SnackAccount(
+              origin: Uri.parse('https://snack.example.org'),
+              client: () => http_testing.MockClient((request) async {
+                expect(request.url.path, '/api/communities');
+                expect(request.headers['cookie'], 'snack_session=u.1.sig');
+                recorded.add(jsonDecode(request.body));
+                recordedOnce.complete();
+                return http.Response('{"communities":[]}', 200);
+              }),
+            ),
+          ),
+          inviteJoinHttpClientProvider.overrideWithValue(
+            http_testing.MockClient((request) async {
+              final encoded = request.headers['Authorization']!.substring(
+                'Nostr '.length,
+              );
+              claimPubkey =
+                  (jsonDecode(
+                            utf8.decode(
+                              base64Url.decode(base64Url.normalize(encoded)),
+                            ),
+                          )
+                          as Map<String, dynamic>)['pubkey']
+                      as String;
+              return http.Response(
+                jsonEncode({'status': 'joined', 'host': 'relay.example.com'}),
+                200,
+              );
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(inviteJoinProvider.notifier);
+      await notifier.prepare(
+        const InviteDeepLink(relayUrl: 'wss://relay.example.com', code: 'c'),
+      );
+      await notifier.confirmJoin();
+      await recordedOnce.future.timeout(const Duration(seconds: 5));
+
+      expect(
+        container.read(inviteJoinProvider).status,
+        InviteJoinStatus.success,
+      );
+      expect(claimPubkey, snackKeys.public);
+      expect(auth.authenticatedCommunities.single.nsec, snackKeys.nsec);
+      expect(recorded, [
+        {'url': 'https://relay.example.com', 'name': '', 'icon': ''},
+      ]);
     },
   );
 

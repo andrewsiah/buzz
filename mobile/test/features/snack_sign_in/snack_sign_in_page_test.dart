@@ -218,4 +218,43 @@ void main() {
     expect(auth?.community?.name, 'Team');
     expect(server.recorded, isEmpty);
   });
+
+  testWidgets('Use a different account drops what a failed attempt saved', (
+    tester,
+  ) async {
+    final server = _Server({
+      'email': 'pat@example.org',
+      'secretKey': _hex,
+      'communities': [],
+      'defaultCommunity': {
+        'community': 'https://welcome.example.org',
+        'code': 'welcome-code',
+      },
+    });
+    final (container, storage) = await pump(
+      tester,
+      server,
+      claimer: (_, _, _) async =>
+          throw const SnackAccountException('Couldn’t reach welcome.'),
+    );
+    // Something an earlier attempt of this account saved.
+    await storage.save(
+      Community.create(
+        name: 'Side',
+        relayUrl: 'wss://side.example.org',
+        nsec: nostr.Keys(_hex).nsec,
+      ),
+    );
+    await signInWithCode(tester);
+    expect(find.text('Couldn’t reach welcome.'), findsOneWidget);
+    expect(await container.read(snackAccountProvider).hasSession, isTrue);
+
+    await tester.tap(find.byKey(const Key('snack-sign-in-different-account')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to Snack'), findsOneWidget);
+    expect(await storage.loadAll(), isEmpty);
+    expect(await container.read(communityListProvider.future), isEmpty);
+    expect(await container.read(snackAccountProvider).hasSession, isFalse);
+  });
 }

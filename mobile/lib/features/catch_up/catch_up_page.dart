@@ -70,6 +70,9 @@ class CatchUpPage extends HookConsumerWidget {
     final loadingQueue = ref.watch(catchUpLoadingProvider);
     final channels = ref.watch(catchUpChannelsProvider);
     final viewer = ref.watch(myPubkeyProvider);
+    final reader = ref.watch(catchUpReaderProvider);
+    // Leaving Catch-up writes the reads still waiting for Undo.
+    useEffect(() => reader.flush, [reader]);
     final tick = useState(0);
     void update(void Function() change) {
       change();
@@ -159,7 +162,6 @@ class CatchUpPage extends HookConsumerWidget {
         );
       });
       if (action == CatchUpAction.keep || noop) return;
-      final reader = ref.read(catchUpReaderProvider);
       try {
         final result = await readCard(reader, key, entries);
         final at = state.steps.indexWhere(
@@ -201,7 +203,6 @@ class CatchUpPage extends HookConsumerWidget {
         state.order = [step.key, ...state.order.where((id) => id != step.key)];
       });
       if (step.action == CatchUpAction.read && !step.noop) {
-        final reader = ref.read(catchUpReaderProvider);
         unawaited(() async {
           try {
             await unreadCard(reader, step.key, step.undo);

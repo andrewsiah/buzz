@@ -135,6 +135,9 @@ class SnackMe {
   /// The account key as NIP-19 nsec, the form [Community] stores.
   String get nsec => snackNsecFromHex(secretKeyHex);
 
+  /// The account's hex public key, derived from its secret key.
+  String get publicKey => nostr.Keys(secretKeyHex).public;
+
   /// The saved community for [community], signed in as this account.
   Community toCommunity(SnackCommunity community) {
     final keys = nostr.Keys(secretKeyHex);
@@ -202,6 +205,7 @@ class SnackAccount {
        origin = origin ?? snackOrigin;
 
   static const _sessionKey = 'snack_session_v1';
+  static const _pubkeyKey = 'snack_account_pubkey_v1';
   static const _timeout = Duration(seconds: 30);
 
   final http.Client Function() _client;
@@ -214,6 +218,58 @@ class SnackAccount {
 
   Future<bool> get hasSession async =>
       (await _storage.read(key: _sessionKey))?.isNotEmpty ?? false;
+
+  /// Remembers which identity is the Snack account's, so sign-out never
+  /// keeps it as a saved key and in-app joins can reuse it.
+  Future<void> rememberAccount(String pubkey) =>
+      _storage.write(key: _pubkeyKey, value: pubkey.toLowerCase());
+
+  /// The signed-in account's hex public key, or null when signed out.
+  /// An unreadable keychain counts as signed out.
+  Future<String?> accountPubkey() async {
+    try {
+      if (!await hasSession) return null;
+      final pubkey = await _storage.read(key: _pubkeyKey);
+      if (pubkey != null && pubkey.isNotEmpty) return pubkey;
+      // Signed in before this key was remembered: ask the server once.
+      final fetched = (await me()).pubkey;
+      if (fetched.isEmpty) return null;
+      await rememberAccount(fetched);
+      return fetched.toLowerCase();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Whether [community] is signed in as the Snack account.
+  static bool isAccountCommunity(Community community, String? accountPubkey) {
+    if (accountPubkey == null) return false;
+    var pubkey = community.pubkey;
+    final nsec = community.nsec;
+    if (pubkey == null && nsec != null && nsec.isNotEmpty) {
+      try {
+        pubkey = nostr.Keys(nostr.Nip19.decode(payload: nsec).data).public;
+      } catch (_) {
+        return false;
+      }
+    }
+    return pubkey?.toLowerCase() == accountPubkey;
+  }
+
+  /// The Snack account key (nsec) when signed in and a saved community holds
+  /// it; null otherwise.
+  Future<String?> accountNsecAmong(List<Community> communities) async {
+    final pubkey = await accountPubkey();
+    for (final community in communities) {
+      final nsec = community.nsec;
+      if (nsec != null &&
+          nsec.isNotEmpty &&
+          isAccountCommunity(community, pubkey)) {
+        return nsec;
+      }
+    }
+    return null;
+  }
 
   /// Emails a 6-digit code to [email].
   Future<void> startEmail(String email) async {
@@ -295,6 +351,7 @@ class SnackAccount {
   Future<void> signOut() async {
     final session = await _storage.read(key: _sessionKey);
     await _storage.delete(key: _sessionKey);
+    await _storage.delete(key: _pubkeyKey);
     if (session == null || session.isEmpty) return;
     final client = _client();
     unawaited(

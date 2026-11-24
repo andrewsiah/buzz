@@ -34,8 +34,13 @@ Future<void> confirmSignOut(BuildContext context, WidgetRef ref) async {
     );
     if (!confirmed || !context.mounted) return;
     // Every key is saved before any community is removed, so a failure
-    // leaves each community with its only copy of its key.
+    // leaves each community with its only copy of its key. The Snack
+    // account's key is not: it lives on the Snack server, and a saved copy
+    // would let anyone with this device back in without the email code.
+    final snack = ref.read(snackAccountProvider);
+    final snackPubkey = await snack.accountPubkey();
     for (final community in communities) {
+      if (SnackAccount.isAccountCommunity(community, snackPubkey)) continue;
       await keepCommunityKey(community);
     }
     // The session ends before any community is removed, so the Sign in
@@ -44,7 +49,7 @@ Future<void> confirmSignOut(BuildContext context, WidgetRef ref) async {
     // push-stop credential it leaves behind.
     await flow?.endAccountSession();
     // Forgets the Snack session here and ends it on the server if reachable.
-    await ref.read(snackAccountProvider).signOut();
+    await snack.signOut();
     // The active community goes last, so removing the others never switches
     // to and connects another one.
     for (final community in [

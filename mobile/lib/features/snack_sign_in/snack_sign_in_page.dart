@@ -131,6 +131,7 @@ class SnackSignInPage extends HookConsumerWidget {
           ),
           const SizedBox(height: Grid.xxs),
           TextButton(
+            key: const Key('snack-sign-in-different-account'),
             onPressed: () {
               code.clear();
               unawaited(notifier.useDifferentEmail());

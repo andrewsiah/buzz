@@ -31,7 +31,12 @@ void main() {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(390, 1600);
       addTearDown(tester.view.reset);
-      FlutterSecureStorage.setMockInitialValues({});
+      // Signed in to Snack: its account key lives on the Snack server.
+      final snackKeys = nostr.Keys.generate();
+      FlutterSecureStorage.setMockInitialValues({
+        'snack_session_v1': 'u.1.sig',
+        'snack_account_pubkey_v1': snackKeys.public,
+      });
       SharedPreferences.setMockInitialValues({});
       PackageInfo.setMockInitialValues(
         appName: 'Buzz',
@@ -54,9 +59,15 @@ void main() {
         relayUrl: 'wss://other.example.org',
         nsec: otherKeys.nsec,
       );
+      final snackCommunity = Community.create(
+        name: 'Snack',
+        relayUrl: 'wss://snack.example.org',
+        nsec: snackKeys.nsec,
+      );
       final storage = CommunityStorage();
       await storage.save(active);
       await storage.save(other);
+      await storage.save(snackCommunity);
       await storage.saveActiveId(active.id);
 
       HostedCommunitiesFixture? hosted;
@@ -124,7 +135,7 @@ void main() {
       expect(find.text('Sign out?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(await storage.loadAll(), hasLength(2));
+      expect(await storage.loadAll(), hasLength(3));
 
       Future<void> confirmSignOut() async {
         await tester.tap(find.byKey(const Key('settings-sign-out')));
@@ -140,7 +151,7 @@ void main() {
         expect(pushes.count, 0);
         expect(find.byType(SettingsPage), findsOneWidget);
         expect(find.textContaining('Failed to sign out'), findsOneWidget);
-        expect(await storage.loadAll(), hasLength(2));
+        expect(await storage.loadAll(), hasLength(3));
         expect(removed, isEmpty);
         ScaffoldMessenger.of(
           tester.element(find.byKey(const Key('settings-sign-out'))),
@@ -191,11 +202,20 @@ void main() {
       expect(find.byType(OnboardingAppEntry), findsOneWidget);
       expect(find.textContaining('Signed in as'), findsNothing);
       // The active community goes last, so nothing switches to the other.
-      expect(removed, [other.id, active.id]);
+      expect(removed, [other.id, snackCommunity.id, active.id]);
       final saved = await AccountIdentityStore().identities();
       expect(
         saved.map((identity) => identity.pubkey),
         containsAll([activeKeys.public, otherKeys.public]),
+      );
+      // The Snack account key is never kept: only the email code gets back in.
+      expect(
+        saved.map((identity) => identity.pubkey),
+        isNot(contains(snackKeys.public)),
+      );
+      expect(
+        await const FlutterSecureStorage().readAll(),
+        isNot(contains('snack_session_v1')),
       );
       if (hosted != null) {
         expect(sessionAtRemoval, everyElement(isFalse));

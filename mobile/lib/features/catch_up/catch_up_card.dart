@@ -335,7 +335,11 @@ class _TimelineRows extends ConsumerWidget {
     final messages = window.value ?? const <CatchUpMessage>[];
     if (messages.isEmpty) {
       return _Status(
-        window.hasError ? "Couldn't load messages." : 'Loading messages…',
+        window.hasError
+            ? "Couldn't load messages."
+            : window.isLoading
+            ? 'Loading messages…'
+            : 'No messages to show. Open the conversation to see more.',
       );
     }
     final firstUnread = newLineId == null
@@ -383,7 +387,11 @@ class _ThreadRows extends ConsumerWidget {
     final messages = thread.value ?? const <CatchUpMessage>[];
     if (messages.isEmpty) {
       return _Status(
-        thread.hasError ? "Couldn't load the thread." : 'Loading thread…',
+        thread.hasError
+            ? "Couldn't load the thread."
+            : thread.isLoading
+            ? 'Loading thread…'
+            : 'No replies to show. Open the thread to see more.',
       );
     }
     return _MessageList(
