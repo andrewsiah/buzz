@@ -26,7 +26,7 @@ import '../../shared/utils/string_utils.dart';
 import '../../shared/widgets/sheet_action_section.dart';
 import '../../shared/widgets/avatar_image.dart';
 import '../../shared/widgets/anchored_popover_menu.dart';
-import '../../shared/widgets/bee_refresh_indicator.dart';
+import '../../shared/widgets/cookie_refresh_indicator.dart';
 import '../../shared/widgets/buzz_loading_indicator.dart';
 import '../../shared/widgets/message_author_meta.dart';
 import '../../shared/widgets/modal_presentation.dart';
@@ -484,7 +484,7 @@ class ActivityPage extends HookConsumerWidget {
         unreadOnly: unreadOnly.value,
       );
     } else {
-      body = BeeRefreshIndicator(
+      body = CookieRefreshIndicator(
         onRefresh: refresh,
         child: CustomScrollView(
           controller: scrollController,
