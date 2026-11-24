@@ -9,6 +9,7 @@ import '../../shared/crypto/nip_oa.dart';
 import '../../shared/profile/user_cache_provider.dart';
 import '../../shared/profile/user_profile.dart';
 import '../../shared/relay/relay.dart';
+import '../../shared/snack/snack_account.dart';
 import '../../shared/theme/theme.dart';
 
 /// Signals that a profile write no longer belongs to the active community.
@@ -105,7 +106,38 @@ class ProfileNotifier extends AsyncNotifier<UserProfile?> {
       await connected.future;
       _requireCurrentWriteContext(context);
     }
-    return _fetch(context);
+    final profile = await _fetch(context);
+    if (pubkey != null && (profile?.displayName?.trim() ?? '').isEmpty) {
+      unawaited(_fillAccountName(context));
+    }
+    return profile;
+  }
+
+  /// Communities (relay + key) this app run already tried to name.
+  static final _namedOnce = <String>{};
+
+  /// SNACK: a new Snack account has no profile yet and shows as its key, so
+  /// once per community and app run publish the account's name (its Snack
+  /// name, else the part of its email before the @) when the signed-in key
+  /// is the Snack account's and the relay still has no name for it.
+  Future<void> _fillAccountName(_ProfileWriteContext context) async {
+    final pubkey = context.pubkey!;
+    final key = '${context.config.baseUrl}|$pubkey';
+    if (!_namedOnce.add(key)) return;
+    try {
+      await future;
+      final account = ref.read(snackAccountProvider);
+      if (await account.accountPubkey() != pubkey.toLowerCase()) return;
+      final me = await account.me();
+      final name = snackAccountDisplayName(me.name, me.email);
+      if (name.isEmpty) return;
+      _requireCurrentWriteContext(context);
+      if ((state.value?.displayName?.trim() ?? '').isNotEmpty) return;
+      await _publishProfilePatch({'display_name': name, 'name': name});
+    } catch (_) {
+      // Best effort: the person can still set a name in their profile.
+      _namedOnce.remove(key);
+    }
   }
 
   Future<UserProfile?> _fetch(_ProfileWriteContext context) async {

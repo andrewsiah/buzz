@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../relay/relay.dart';
+import '../snack/snack_account.dart';
 import '../widgets/feedback_snackbar.dart';
 import 'snack_web_links.dart';
 
@@ -14,10 +15,17 @@ LaunchMode webLinkLaunchMode(Uri uri) => isSnackWebUrl(uri)
     ? LaunchMode.inAppBrowserView
     : LaunchMode.externalApplication;
 
-/// Opens a web link the way [webLinkLaunchMode] chooses. Overridable in tests.
+/// Opens a web link the way [webLinkLaunchMode] chooses. Snack's own web app
+/// opens through a one-time sign-in link, so the sheet is already signed in
+/// as the app's account. Overridable in tests.
 final webLinkLauncherProvider = Provider<Future<bool> Function(Uri)>(
-  (ref) =>
-      (uri) => launchUrl(uri, mode: webLinkLaunchMode(uri)),
+  (ref) => (uri) async {
+    final mode = webLinkLaunchMode(uri);
+    final target = mode == LaunchMode.inAppBrowserView
+        ? await ref.read(snackAccountProvider).signedInWebUrl(uri)
+        : uri;
+    return launchUrl(target, mode: mode);
+  },
 );
 
 /// Opens [feature] (or, without one, the channel itself) for [channelId] on

@@ -191,6 +191,15 @@ Future<String?> _openSystemBrowser(Uri url) =>
 bool get snackGoogleSupported =>
     !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
+/// The name a new Snack account shows as: its Snack [name], else the part of
+/// its [email] before the @. Empty when neither has one.
+String snackAccountDisplayName(String name, String email) {
+  final trimmed = name.trim();
+  if (trimmed.isNotEmpty) return trimmed;
+  final at = email.indexOf('@');
+  return at > 0 ? email.substring(0, at).trim() : '';
+}
+
 /// Talks to the Snack account server. Keeps the session cookie in the
 /// device-only keychain; never logs it or the account key.
 class SnackAccount {
@@ -331,6 +340,46 @@ class SnackAccount {
     final response = await _send('GET', '/api/me', authenticated: true);
     return SnackMe.fromJson(_decode(response));
   }
+
+  /// [target] on Snack's web app, wrapped in a one-time sign-in link so the
+  /// in-app browser opens it already signed in as this account. Returns
+  /// [target] unchanged when it isn't on this account server's origin, when
+  /// signed out, or when the server can't mint a link in time: the web then
+  /// asks the person to sign in, as before. The account key never goes into
+  /// a URL; the link is single-use and lives about a minute.
+  Future<Uri> signedInWebUrl(
+    Uri target, {
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    if (!_sameOrigin(target, origin)) return target;
+    try {
+      if (!await hasSession) return target;
+      final response = await _send(
+        'POST',
+        '/api/auth/handoff',
+        authenticated: true,
+      ).timeout(timeout);
+      final body = _decode(response);
+      final url = body is Map ? body['url'] : null;
+      final link = url is String ? Uri.tryParse(url) : null;
+      if (link == null || !_sameOrigin(link, origin)) return target;
+      final next = Uri(
+        path: target.path.isEmpty ? '/' : target.path,
+        query: target.hasQuery ? target.query : null,
+        fragment: target.hasFragment ? target.fragment : null,
+      ).toString();
+      return link.replace(
+        queryParameters: {...link.queryParameters, 'next': next},
+      );
+    } catch (_) {
+      return target;
+    }
+  }
+
+  static bool _sameOrigin(Uri a, Uri b) =>
+      a.scheme.toLowerCase() == b.scheme.toLowerCase() &&
+      a.host.toLowerCase() == b.host.toLowerCase() &&
+      a.port == b.port;
 
   /// Records a joined community on the account, for the next sign-in.
   Future<void> recordCommunity(SnackCommunity community) async {

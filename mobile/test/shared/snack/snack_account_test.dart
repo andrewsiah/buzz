@@ -221,4 +221,91 @@ void main() {
       ),
     );
   });
+
+  group('signed-in web hand-off', () {
+    final origin = Uri.parse('https://snack.example.org');
+    final board = Uri.parse(
+      'https://snack.example.org/?community=https%3A%2F%2Fr.example&channel=c1&panel=board',
+    );
+
+    test(
+      'wraps a web page in a one-time link minted with the session',
+      () async {
+        FlutterSecureStorage.setMockInitialValues({
+          'snack_session_v1': 'u1.99.sig',
+        });
+        final requests = <http.Request>[];
+        final account = SnackAccount(
+          origin: origin,
+          client: () => MockClient((request) async {
+            requests.add(request);
+            return http.Response(
+              jsonEncode({
+                'url':
+                    'https://snack.example.org/api/auth/handoff?code=one.2.sig',
+                'expiresIn': 60,
+              }),
+              200,
+            );
+          }),
+        );
+        final url = await account.signedInWebUrl(board);
+        expect(requests.single.method, 'POST');
+        expect(requests.single.url.path, '/api/auth/handoff');
+        expect(requests.single.headers['Cookie'], 'snack_session=u1.99.sig');
+        expect(url.origin, origin.origin);
+        expect(url.path, '/api/auth/handoff');
+        expect(url.queryParameters['code'], 'one.2.sig');
+        expect(
+          url.queryParameters['next'],
+          '/?community=https%3A%2F%2Fr.example&channel=c1&panel=board',
+        );
+        // The session itself never goes into the link.
+        expect(url.toString(), isNot(contains('u1.99.sig')));
+      },
+    );
+
+    test('leaves the page alone when it cannot hand off', () async {
+      final noRequest = MockClient((_) async => fail('no request expected'));
+      // Signed out.
+      expect(
+        await SnackAccount(
+          origin: origin,
+          client: () => noRequest,
+        ).signedInWebUrl(board),
+        board,
+      );
+      FlutterSecureStorage.setMockInitialValues({
+        'snack_session_v1': 'u1.99.sig',
+      });
+      // Another site, or a community subdomain the session cookie can't reach.
+      final other = Uri.parse('https://team.snack.example.org/?channel=c1');
+      expect(
+        await SnackAccount(
+          origin: origin,
+          client: () => noRequest,
+        ).signedInWebUrl(other),
+        other,
+      );
+      // Server refuses, or hands back a link to somewhere else.
+      for (final reply in [
+        http.Response('{"error":"signed_out"}', 401),
+        http.Response('{"url":"https://evil.example/x"}', 200),
+        http.Response('not json', 200),
+      ]) {
+        final account = SnackAccount(
+          origin: origin,
+          client: () => MockClient((_) async => reply),
+        );
+        expect(await account.signedInWebUrl(board), board);
+      }
+    });
+  });
+
+  test('new accounts are named by their Snack name, else their email', () {
+    expect(snackAccountDisplayName(' Ada ', 'ada@example.org'), 'Ada');
+    expect(snackAccountDisplayName('', 'ada.l@example.org'), 'ada.l');
+    expect(snackAccountDisplayName('', ''), '');
+    expect(snackAccountDisplayName('', '@example.org'), '');
+  });
 }
