@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../shared/community/community_changed_error.dart';
 import '../../shared/mentions/mention_tags.dart';
 import '../../shared/relay/relay.dart';
 import '../channels/channel_management_provider.dart';
@@ -180,7 +181,7 @@ class SendMessage {
 
   void _ensureDeliveryValid() {
     if (_isDeliveryValid?.call() == false) {
-      throw StateError(
+      throw CommunityChangedError(
         'Message delivery cancelled because the active community changed',
       );
     }

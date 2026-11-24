@@ -13,6 +13,7 @@ import 'package:buzz/features/channels/agent_activity/observer_subscription.dart
 import 'package:buzz/features/channels/agent_activity/observer_models.dart';
 import 'package:buzz/shared/auth/auth_provider.dart';
 import 'package:buzz/shared/community/community.dart';
+import 'package:buzz/shared/community/community_changed_error.dart';
 import 'package:buzz/shared/relay/relay.dart';
 import 'package:buzz/shared/relay/relay_query_response.dart';
 
@@ -2216,6 +2217,53 @@ void main() {
       expect(socket.messages, isEmpty);
     },
   );
+
+  test('a publish during a reconnect waits for it, within its timeout, and '
+      'never crosses a community change', () async {
+    // The real app-resume path is in relay_reconnect_resume_test.dart.
+    // Reconnect in the same community: a new
+    // connection generation, and the waiting send goes out on it.
+    final socket = _RecordingRelaySocket();
+    final session = RelaySessionNotifier();
+    session.debugAttachSocketForTest(socket);
+    session.debugSetSessionStatus(SessionStatus.reconnecting);
+    final waiting = session.publish(_event(id: 'event-a'));
+    await Future<void>.delayed(Duration.zero);
+    expect(socket.messages, isEmpty);
+    session.debugSupersedeConnection();
+    session.debugAttachSocketForTest(socket);
+    await Future<void>.delayed(Duration.zero);
+    expect(socket.messages.single.first, 'EVENT');
+    session.debugHandleMessage(['OK', 'event-a', true, '']);
+    expect((await waiting).id, 'event-a');
+
+    // No reconnect within the timeout: a plain failure, nothing sent.
+    socket.messages.clear();
+    session.debugSetSessionStatus(SessionStatus.reconnecting);
+    await expectLater(
+      session.publish(
+        _event(id: 'event-b'),
+        timeout: const Duration(milliseconds: 20),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e,
+          'not a community change',
+          isNot(isA<CommunityChangedError>()),
+        ),
+      ),
+    );
+    expect(socket.messages, isEmpty);
+
+    // The community changes while waiting: refused as a community change
+    // even though the new context's socket connects.
+    final orphaned = session.publish(_event(id: 'event-c'));
+    await Future<void>.delayed(Duration.zero);
+    session.debugBeginNewContext();
+    session.debugAttachSocketForTest(socket);
+    await expectLater(orphaned, throwsA(isA<CommunityChangedError>()));
+    expect(socket.messages, isEmpty);
+  });
 
   test('an ordinary OK rejection does not arm the gate', () async {
     final gate = RelayRateLimitGate(now: () => DateTime(2026));

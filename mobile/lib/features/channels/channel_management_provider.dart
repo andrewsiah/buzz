@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../shared/auth/auth.dart';
+import '../../shared/community/community_changed_error.dart';
 import '../../shared/custom_emoji/custom_emoji.dart';
 import '../../shared/custom_emoji/custom_emoji_provider.dart';
 import '../../shared/crypto/nip_oa.dart';

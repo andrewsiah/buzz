@@ -12,6 +12,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../features/age_gate/age_signal_provider.dart';
 import '../auth/auth.dart';
+import '../community/community_changed_error.dart';
 import '../hosted/hosted_relay_auth.dart';
 import '../hosted/builderlab_account.dart';
 import 'nostr_filters.dart';
@@ -32,6 +33,7 @@ import 'package:buzz/shared/crypto/event_signing.dart';
 export 'relay_session_types.dart';
 
 part 'relay_session_auth.dart';
+part 'relay_session_publish.dart';
 part 'relay_session_subscriptions.dart';
 part 'relay_session_snapshot.dart';
 
@@ -106,6 +108,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
   final Map<Object, String> _visibleChannelsByOwner = {};
   final Map<Object, Future<void> Function()> _beforePauseCallbacks = {};
   bool _socketConnected = false;
+  Completer<void>? _connectedSignal;
   bool _closedRetryReplayScheduled = false;
   String? _relayUrl;
 
@@ -428,37 +431,12 @@ class RelaySessionNotifier extends Notifier<SessionState> {
     };
   }
 
+  /// Publishes a signed [event] and resolves with the relay's OK, waiting out
+  /// a reconnect in the same community (see `_publish`).
   Future<NostrEvent> publish(
     NostrEvent event, {
     Duration timeout = const Duration(seconds: 8),
-  }) async {
-    final generation = _connectionGeneration;
-    if (_rateLimitGate.isActive) await _rateLimitGate.wait();
-    if (!_isActiveConnection(generation) || !_socketConnected) {
-      throw StateError('Relay session is not connected');
-    }
-
-    final completer = Completer<NostrEvent>();
-
-    final timer = Timer(timeout, () {
-      final pending = _pendingEvents.remove(event.id);
-      if (pending != null && !pending.completer.isCompleted) {
-        pending.completer.completeError(
-          TimeoutException(
-            'Event ${event.id} not acknowledged within $timeout',
-          ),
-        );
-      }
-    });
-
-    _pendingEvents[event.id] = _PendingEvent(
-      completer: completer,
-      timeout: timer,
-    );
-
-    _socket?.send(['EVENT', event.toJson()]);
-    return completer.future;
-  }
+  }) => _publish(event, timeout: timeout);
 
   void sendRaw(List<dynamic> payload) {
     _socket?.send(payload);
@@ -484,6 +462,13 @@ class RelaySessionNotifier extends Notifier<SessionState> {
   @visibleForTesting
   void debugSupersedeConnection() => _connectionGeneration++;
 
+  /// Mirrors a rebuild for another community or identity, without disposing.
+  @visibleForTesting
+  void debugBeginNewContext() {
+    _contextGeneration++;
+    _connectionGeneration++;
+  }
+
   @visibleForTesting
   void debugHandleDisconnected([Object? error]) {
     _socketConnected = false;
@@ -499,6 +484,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
   @visibleForTesting
   void debugSetSessionStatus(SessionStatus status) {
     _socketConnected = status == SessionStatus.connected;
+    if (_socketConnected) _signalConnected();
   }
 
   @visibleForTesting
@@ -513,6 +499,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
     _socket?.dispose();
     _socket = socket;
     _socketConnected = true;
+    _signalConnected();
   }
 
   /// Registers a visible channel and returns an owner-scoped release callback.
@@ -564,6 +551,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
     _reconnectTimer?.cancel();
     _cancelAllHistory(Exception('App moved to background'));
     _rejectAllPending(Exception('App moved to background'));
+    _signalConnected();
     _socket?.disconnect();
     state = const SessionState(status: SessionStatus.disconnected);
   }
@@ -652,6 +640,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
   Future<void> _handleConnected(int generation) async {
     if (_disposed || generation != _connectionGeneration) return;
     _socketConnected = true;
+    _signalConnected();
     ref.read(hostedRelayAuthProvider).connected(ref.read(relayConfigProvider));
     _hasConnectedOnce = true;
     // The backoff is not reset here: a client bounced repeatedly must keep
@@ -681,6 +670,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
         (error is AccountFailure && error != AccountFailure.unavailable)) {
       _reconnectTimer?.cancel();
       state = const SessionState(status: SessionStatus.disconnected);
+      _signalConnected();
       return;
     }
     _scheduleReconnect(closeCode);
@@ -1166,6 +1156,7 @@ class RelaySessionNotifier extends Notifier<SessionState> {
 
   void _dispose() {
     _disposed = true;
+    _signalConnected();
     _contextGeneration++;
     _beforePauseCallbacks.clear();
     _connectionGeneration++;
