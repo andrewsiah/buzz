@@ -483,6 +483,9 @@ enum _NonMemberMentionChoice { invite, sendWithoutInviting }
 /// User-facing text for a failed add or send.
 String _composeSendErrorMessage(Object error) {
   if (error is AddMembersException) return error.message;
+  if (error is TimeoutException) {
+    return 'Not sent. The server did not answer in time. Try again.';
+  }
   return error
       .toString()
       .replaceFirst('Exception: ', '')

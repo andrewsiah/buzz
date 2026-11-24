@@ -27,7 +27,11 @@ extension on RelaySessionNotifier {
 
     final completer = Completer<NostrEvent>();
 
-    final timer = Timer(timeout, () {
+    // The whole send, reconnect wait included, stays within [timeout]; the
+    // ack still gets a short floor so a late reconnect isn't failed at once.
+    final left = deadline.difference(_now());
+    const ackFloor = Duration(seconds: 2);
+    final timer = Timer(left < ackFloor ? ackFloor : left, () {
       final pending = _pendingEvents.remove(event.id);
       if (pending != null && !pending.completer.isCompleted) {
         pending.completer.completeError(
