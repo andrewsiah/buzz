@@ -130,6 +130,26 @@ class MobileCatchUpReader implements CatchUpReader {
     for (final write in pending.writes) {
       write();
     }
+    _syncChannelRead(parseCardKey(key).channelId);
+  }
+
+  /// SNACK: a mention (or a DM message) is read by its own `msg:` mark, which
+  /// never syncs, so the web or a reinstall showed it unread again. Save the
+  /// channel's synced mark through just before its oldest message still
+  /// unread, up to the newest one read by its own mark: it reads nothing
+  /// unread here. A hand mark anywhere in the channel skips it. Reading a
+  /// thread card does it too, so a mention newer than an unread reply syncs
+  /// once that reply is read.
+  void _syncChannelRead(String channelId) {
+    final evidence = _evidence(channelId);
+    if (evidence == null || evidence.handMarked) return;
+    final oldestUnread = evidence.unreadEvents.firstOrNull?.createdAt;
+    final through = evidence.ownMarkReadThrough(before: oldestUnread);
+    if (through == null ||
+        through <= (_readState().effectiveTimestamp(channelId) ?? -1)) {
+      return;
+    }
+    _writes.markContextRead(channelId, through);
   }
 
   /// Drops [key]'s waiting writes; returns whether any were waiting.

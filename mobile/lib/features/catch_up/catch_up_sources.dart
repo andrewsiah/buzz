@@ -19,6 +19,8 @@ class CatchUpEvidence {
     required this.unread,
     required this.activity,
     required this.unreadEvents,
+    this.ownMarkReads = const [],
+    this.handMarked = false,
   });
 
   final Channel channel;
@@ -27,6 +29,18 @@ class CatchUpEvidence {
 
   /// The channel's unread observed events, oldest first.
   final List<ObservedUnreadEvent> unreadEvents;
+
+  /// When each observed event read by its own `msg:` mark was posted: a mark
+  /// that never syncs (a mention read in Catch-up).
+  final List<int> ownMarkReads;
+
+  /// The newest of [ownMarkReads] posted [before] that time (any, if null).
+  int? ownMarkReadThrough({int? before}) => ownMarkReads
+      .where((at) => before == null || at < before)
+      .fold<int?>(null, (newest, at) => max(newest ?? at, at));
+
+  /// A hand mark on the channel, one of its threads or one of its messages.
+  final bool handMarked;
 
   /// Unread top-level events: what the conversation's own timeline shows.
   Iterable<ObservedUnreadEvent> get timelineEvents =>
@@ -69,6 +83,11 @@ CatchUpEvidence buildCatchUpEvidence({
         forced.value == channel.id &&
         !forced.key.startsWith(threadContextPrefix),
   );
+  final ownMarkReads = [
+    for (final event in events?.values ?? const <ObservedUnreadEvent>[])
+      if ((markerOf(msgContextKey(event.id)) ?? -1) >= event.createdAt)
+        event.createdAt,
+  ];
   int? latest;
   for (final event in unreadEvents) {
     latest = max(latest ?? 0, event.createdAt);
@@ -77,6 +96,8 @@ CatchUpEvidence buildCatchUpEvidence({
   return CatchUpEvidence(
     channel: channel,
     unreadEvents: unreadEvents,
+    ownMarkReads: ownMarkReads,
+    handMarked: forcedUnreadContexts.values.contains(channel.id),
     unread: CatchUpUnread(
       observedCount: unreadEvents.length,
       attentionCount: attention,
