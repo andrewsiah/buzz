@@ -30,12 +30,31 @@ class _MeChatDraft extends HookConsumerWidget {
     final composerBusy = useState(false);
     final error = useState<String?>(null);
     final directory = ref.watch(meAssistantsProvider);
-    final bestie = ref.watch(defaultAgentProvider).value;
+    final bestiePreference = ref.watch(defaultAgentProvider);
+    final bestie = bestiePreference.value;
     final choices = directory.value ?? [];
+    // A main agent outside the listed agents still counts once the relay
+    // confirms the owner signed for it.
+    final bestieOwned =
+        bestie != null &&
+        !choices.any((agent) => agent.pubkey == bestie) &&
+        ref.watch(meAssistantOwnershipProvider(bestie)).value == true;
+    final available = {
+      for (final agent in choices) agent.pubkey,
+      if (bestieOwned) bestie,
+    };
+    // Never make the owner pick: main agent, else the last one used here,
+    // else the only one. The header still changes it.
     final selected =
         pending.value?.agent ??
         manualAgent.value ??
-        (choices.any((agent) => agent.pubkey == bestie) ? bestie : null);
+        defaultMeRecipient(
+          available: available,
+          mainAgent: bestie,
+          recent: readMeRecentAgent(sync),
+        );
+    final loadingAgents =
+        selected == null && (directory.isLoading || bestiePreference.isLoading);
     final profile = ref.watch(userCacheProvider)[selected];
     final agent = choices
         .where((agent) => agent.pubkey == selected)
@@ -45,7 +64,7 @@ class _MeChatDraft extends HookConsumerWidget {
     final plainName =
         agent?.displayName ??
         profile?.label ??
-        (selected == null ? 'Choose an agent' : 'Agent');
+        (selected == null && !loadingAgents ? 'Choose an agent' : 'Agent');
     // A saved choice that is no longer offered, such as an archived agent, is
     // labeled against the live agents so it never reads as a live namesake.
     final name =
@@ -105,11 +124,45 @@ class _MeChatDraft extends HookConsumerWidget {
         throw Exception('Your account or community changed. Return to Solo.');
       }
       final saved = pending.value;
-      final recipient = saved?.agent ?? selected;
+      var recipient = saved?.agent ?? selected;
+      var offered = available;
+      // Typing never waits on the agent list or the main-agent setting; a
+      // send that beats them waits here, then picks the same default.
+      if (saved == null && recipient == null && loadingAgents) {
+        final (listed, main) = await (
+          ref
+              .read(meAssistantsProvider.future)
+              .timeout(const Duration(seconds: 20))
+              .then<Set<String>?>(
+                (value) => {for (final agent in value) agent.pubkey},
+              )
+              .catchError((Object _) => null),
+          ref
+              .read(defaultAgentProvider.future)
+              .timeout(const Duration(seconds: 10))
+              .then<String?>((value) => value)
+              .catchError((Object _) => null),
+        ).wait;
+        if (!context.mounted || sync.disposed) {
+          throw Exception('Your account or community changed. Return to Solo.');
+        }
+        offered = listed ?? const {};
+        if (main != null && !offered.contains(main)) {
+          final owned = await ref
+              .read(meAssistantOwnershipProvider(main).future)
+              .catchError((Object _) => false);
+          if (owned) offered = {...offered, main};
+        }
+        recipient = defaultMeRecipient(
+          available: offered,
+          mainAgent: main,
+          recent: readMeRecentAgent(sync),
+        );
+      }
       if (recipient == null) {
         throw Exception('Choose an agent in the chat header before sending.');
       }
-      if (saved == null && !choices.any((agent) => agent.pubkey == recipient)) {
+      if (saved == null && !offered.contains(recipient)) {
         throw Exception('Choose an available agent in the chat header.');
       }
       if (utf8.encode(content).length > 8192 ||
@@ -142,6 +195,7 @@ class _MeChatDraft extends HookConsumerWidget {
           displayName: result.name,
           recipientCount: 1,
         );
+        unawaited(rememberMeRecentAgent(sync, recipient));
         if (context.mounted) {
           manualAgent.value = recipient;
           created.value = result;
@@ -165,7 +219,11 @@ class _MeChatDraft extends HookConsumerWidget {
       }
     }
 
-    final label = selected == null ? 'Choose an agent' : 'Change agent: $name';
+    final label = selected != null
+        ? 'Change agent: $name'
+        : loadingAgents
+        ? 'Loading agents'
+        : 'Choose an agent';
     return PopScope(
       canPop: !busy.value && !composerBusy.value && !workspace.busy,
       child: FrostedScaffold(

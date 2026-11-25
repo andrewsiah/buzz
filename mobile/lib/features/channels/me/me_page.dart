@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:buzz/shared/widgets/feedback_snackbar.dart';
 import 'package:buzz/shared/widgets/adaptive_conversation_pane.dart';
@@ -18,6 +19,7 @@ import 'me_unread_provider.dart';
 import '../../../shared/widgets/avatar_image.dart';
 import '../../../shared/me/me_groups.dart';
 import '../../../shared/me/default_agent.dart';
+import '../../../shared/me/me_default_recipient.dart';
 import '../../../shared/me/me_chat_title.dart';
 import '../../../shared/me/solo_chat_seed.dart';
 import '../../activity/compose_drafts_provider.dart';

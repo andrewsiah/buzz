@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:buzz/shared/me/me_chat_creation.dart';
 import 'package:buzz/shared/me/default_agent.dart';
+import 'package:buzz/shared/me/me_default_recipient.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:nostr/nostr.dart' as nostr;
@@ -384,11 +385,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ComposeBar), findsOneWidget);
       expect(find.byType(BottomSheet), findsNothing);
-      // Missing agent fails before the next frame and must unlock the header.
-      await tester.tap(find.text('Message Choose an agent'));
+      // Typing never waits on the main-agent setting, and the header stays
+      // usable while it loads.
+      expect(find.byTooltip('Loading agents'), findsOneWidget);
+      await tester.tap(find.text('Message Agent'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Hello');
-      await tester.tap(find.byIcon(BuzzIcons.arrowUp).hitTestable().last);
       await tester.pumpAndSettle();
       expect(
         tester
@@ -396,10 +398,6 @@ void main() {
             .onPressed,
         isNotNull,
       );
-      ScaffoldMessenger.of(
-        tester.element(find.byType(ComposeBar)),
-      ).clearSnackBars();
-      await tester.pumpAndSettle();
       bestie.add('bestie');
       await tester.pumpAndSettle();
       expect(find.byTooltip('Change agent: My Bestie'), findsOneWidget);
@@ -530,10 +528,8 @@ void main() {
       await tester.pumpAndSettle();
       action.value!();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Choose an agent'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Pip'));
-      await tester.pumpAndSettle();
+      // The only agent is chosen without asking.
+      expect(find.byTooltip('Change agent: Pip'), findsOneWidget);
       await tester.tap(find.text('Message Pip'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Keep this first message');
@@ -890,6 +886,177 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  group('new chat never makes the owner pick', () {
+    const two = [
+      AgentDirectoryEntry(pubkey: 'bestie', displayName: 'My Bestie'),
+      AgentDirectoryEntry(pubkey: 'other', displayName: 'Other agent'),
+    ];
+    // The loading bar animates forever, so step frames instead of settling.
+    Future<void> settle(WidgetTester tester) async {
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    Future<MeSync> openDraft(
+      WidgetTester tester, {
+      required Future<List<AgentDirectoryEntry>> Function() agents,
+      required Stream<String?> Function() bestie,
+      String? recent,
+      Map<String, bool> owned = const {},
+    }) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final action = ValueNotifier<VoidCallback?>(null);
+      addTearDown(action.dispose);
+      final sync = MeSync(
+        _UnavailableRelay(),
+        RelayConfig(
+          baseUrl: 'https://relay.test',
+          nsec: nostr.Keys.generate().nsec,
+        ),
+        prefs: prefs,
+      );
+      if (recent != null) await prefs.setString(meRecentAgentKey(sync), recent);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            savedPrefsProvider.overrideWithValue(prefs),
+            defaultAgentProvider.overrideWith((ref) => bestie()),
+            meSyncProvider.overrideWithValue(sync),
+            meGroupsProvider.overrideWith(
+              (ref) => Stream.value(const MeGroups()),
+            ),
+            channelsProvider.overrideWith(FakeChannels.new),
+            meAssistantsProvider.overrideWith((ref) => agents()),
+            for (final MapEntry(:key, :value) in owned.entries)
+              meAssistantOwnershipProvider(
+                key,
+              ).overrideWith((ref) async => value),
+            agentDirectoryProvider.overrideWith((ref) async => []),
+            agentOwnersProvider.overrideWith((ref) async => {}),
+            customEmojiListProvider.overrideWithValue([]),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: MePage(newChatAction: action),
+          ),
+        ),
+      );
+      await settle(tester);
+      action.value!();
+      await settle(tester);
+      return sync;
+    }
+
+    Future<void> send(WidgetTester tester, String hint, String text) async {
+      await tester.tap(find.text(hint));
+      await settle(tester);
+      await tester.enterText(find.byType(TextField), text);
+      await settle(tester);
+      await tester.tap(find.byIcon(BuzzIcons.arrowUp).hitTestable().last);
+      await settle(tester);
+    }
+
+    testWidgets('the main agent is used as soon as it loads', (tester) async {
+      final sync = await openDraft(
+        tester,
+        agents: () async => two,
+        bestie: () => Stream.value('bestie'),
+      );
+      expect(find.byTooltip('Change agent: My Bestie'), findsOneWidget);
+      await send(tester, 'Message My Bestie', 'Hi');
+      // The relay is down in tests, so the creation waits to retry, addressed.
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+      expect(MeChatCreation.pending(sync)?.agent, 'bestie');
+      ScaffoldMessenger.of(tester.element(find.text('Retry'))).clearSnackBars();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('without a main agent, the last agent used is the default', (
+      tester,
+    ) async {
+      final sync = await openDraft(
+        tester,
+        agents: () async => two,
+        bestie: () => Stream.value(null),
+        recent: 'other',
+      );
+      expect(find.byTooltip('Change agent: Other agent'), findsOneWidget);
+      await send(tester, 'Message Other agent', 'Hi');
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+      expect(MeChatCreation.pending(sync)?.agent, 'other');
+      ScaffoldMessenger.of(tester.element(find.text('Retry'))).clearSnackBars();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a main agent missing from the list is used once it is '
+        'confirmed as the owner\'s', (tester) async {
+      final sync = await openDraft(
+        tester,
+        agents: () async => two,
+        bestie: () => Stream.value('kiss'),
+        owned: {'kiss': true},
+      );
+      expect(find.byTooltip('Choose an agent'), findsNothing);
+      await send(tester, 'Message Agent', 'Hi');
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+      expect(MeChatCreation.pending(sync)?.agent, 'kiss');
+      ScaffoldMessenger.of(tester.element(find.text('Retry'))).clearSnackBars();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a send while agents still load waits, then goes to the main '
+        'agent', (tester) async {
+      final agents = Completer<List<AgentDirectoryEntry>>();
+      final bestie = StreamController<String?>();
+      addTearDown(bestie.close);
+      final sync = await openDraft(
+        tester,
+        agents: () => agents.future,
+        bestie: () => bestie.stream,
+      );
+      expect(find.byTooltip('Loading agents'), findsOneWidget);
+      await send(tester, 'Message Agent', 'Typed before anything loaded');
+      expect(
+        find.text('Choose an agent in the chat header before sending.'),
+        findsNothing,
+      );
+      agents.complete(two);
+      bestie.add('bestie');
+      await settle(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+      expect(MeChatCreation.pending(sync)?.agent, 'bestie');
+      ScaffoldMessenger.of(tester.element(find.text('Retry'))).clearSnackBars();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('several agents and no history still offer the picker', (
+      tester,
+    ) async {
+      await openDraft(
+        tester,
+        agents: () async => two,
+        bestie: () => Stream.value(null),
+      );
+      expect(find.byTooltip('Choose an agent'), findsOneWidget);
+      await tester.tap(find.byTooltip('Choose an agent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Other agent'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Change agent: Other agent'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
 }
 
 class _SharedAndOrdinary extends ChannelsNotifier {

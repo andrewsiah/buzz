@@ -341,6 +341,37 @@ class SnackAccount {
     return SnackMe.fromJson(_decode(response));
   }
 
+  /// The agents Snack Cloud lists for this account (the ones Snack runs and
+  /// the ones connected), as pubkey to name. Discovery only: callers verify
+  /// ownership on the relay before offering one. Empty when signed out; a
+  /// list that fails to load is skipped.
+  Future<Map<String, String>> ownedAgents() async {
+    if (!await hasSession) return const {};
+    final agents = <String, String>{};
+    for (final path in const ['/api/agents/hosted', '/api/agents']) {
+      final Object? json;
+      try {
+        json = _decode(await _send('GET', path, authenticated: true));
+      } catch (_) {
+        continue;
+      }
+      final list = json is Map ? json['agents'] : null;
+      if (list is! List) continue;
+      for (final entry in list.take(500)) {
+        if (entry is! Map) continue;
+        final pubkey = entry['pubkey'];
+        final name = entry['name'];
+        if (pubkey is String &&
+            RegExp(r'^[0-9a-f]{64}$').hasMatch(pubkey) &&
+            name is String &&
+            name.trim().isNotEmpty) {
+          agents.putIfAbsent(pubkey, () => name.trim());
+        }
+      }
+    }
+    return agents;
+  }
+
   /// [target] on Snack's web app, wrapped in a one-time sign-in link so the
   /// in-app browser opens it already signed in as this account. Returns
   /// [target] unchanged when it isn't on this account server's origin, when

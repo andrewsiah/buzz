@@ -11,6 +11,7 @@ import '../mentions/agent_identity_provider.dart';
 import '../relay/relay.dart';
 import 'me_agent_inventory.dart';
 import '../identity_archives/identity_archives.dart';
+import '../snack/snack_account.dart';
 import 'me_sync.dart';
 
 /// The owner's current inventory, with verified ownership and desktop's
@@ -27,9 +28,16 @@ final meAssistantsProvider = FutureProvider<List<AgentDirectoryEntry>>((
   // Refresh archive evidence with the inventory, including explicit retries.
   // Ordinary sheet openings reuse this provider's completed directory.
   final archivedRequest = ref.refresh(identityArchivesProvider.future);
+  // Snack accounts keep their agents in Snack Cloud, not in desktop's relay
+  // inventory, so both are read. Each is only discovery: the profile check
+  // below admits an agent only with the owner's signed attestation.
+  final hostedRequest = ref.read(meSnackAgentsReadProvider)();
   final inventory = await loadMeAgentInventory(sync);
   sync.check();
-  final profiles = await _loadProfiles(sync, inventory.keys.toList());
+  final hosted = await hostedRequest;
+  sync.check();
+  final names = {...hosted, ...inventory};
+  final profiles = await _loadProfiles(sync, names.keys.toList());
   final archived = await archivedRequest;
   sync.check();
   final choices = [
@@ -37,7 +45,7 @@ final meAssistantsProvider = FutureProvider<List<AgentDirectoryEntry>>((
       if (!archived.contains(profile.pubkey))
         AgentDirectoryEntry(
           pubkey: profile.pubkey,
-          displayName: inventory[profile.pubkey],
+          displayName: names[profile.pubkey],
           avatarUrl: profile.avatarUrl,
           respondTo: profile.respondTo,
           respondToAllowlist: profile.respondToAllowlist,
@@ -51,6 +59,20 @@ final meAssistantsProvider = FutureProvider<List<AgentDirectoryEntry>>((
   );
   return choices;
 }, retry: (_, _) => null);
+
+/// The agents Snack Cloud lists for the signed-in account, as pubkey to name.
+/// Never fails: signed out or offline reads as none. Tests replace the read.
+final meSnackAgentsReadProvider =
+    Provider<Future<Map<String, String>> Function()>((ref) {
+      final account = ref.watch(snackAccountProvider);
+      return () async {
+        try {
+          return await account.ownedAgents();
+        } catch (_) {
+          return const {};
+        }
+      };
+    });
 
 /// Reads the owner's inventory keys. Tests replace the read.
 final meAgentInventoryReadProvider = Provider<Future<Set<String>> Function()>((
