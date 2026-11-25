@@ -333,9 +333,21 @@ void main() {
         }),
       );
       expect(await account.ownedAgents(), {kiss: 'Kiss', helper: 'Helper'});
-      expect(paths, ['/api/agents/hosted', '/api/agents']);
+      expect(paths.toSet(), {'/api/agents/hosted', '/api/agents'});
     },
   );
+
+  test('a 401 from an agent list never signs the person out', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'snack_session_v1': 'u1.99.sig',
+    });
+    final account = SnackAccount(
+      origin: Uri.parse('https://snack.example.org'),
+      client: () => MockClient((_) async => http.Response('{}', 401)),
+    );
+    expect(await account.ownedAgents(), isEmpty);
+    expect(await account.hasSession, isTrue);
+  });
 
   test('owned agents are empty and ask nothing when signed out', () async {
     final account = SnackAccount(

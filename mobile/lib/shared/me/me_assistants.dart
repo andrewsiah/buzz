@@ -31,7 +31,13 @@ final meAssistantsProvider = FutureProvider<List<AgentDirectoryEntry>>((
   // Snack accounts keep their agents in Snack Cloud, not in desktop's relay
   // inventory, so both are read. Each is only discovery: the profile check
   // below admits an agent only with the owner's signed attestation.
-  final hostedRequest = ref.read(meSnackAgentsReadProvider)();
+  // Bounded so a slow Snack Cloud can't hold up the relay's own list.
+  final hostedRequest = ref
+      .read(meSnackAgentsReadProvider)()
+      .timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => const <String, String>{},
+      );
   final inventory = await loadMeAgentInventory(sync);
   sync.check();
   final hosted = await hostedRequest;
