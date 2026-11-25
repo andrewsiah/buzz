@@ -105,7 +105,7 @@ import 'package:buzz/shared/widgets/app_list_card.dart';
 import 'package:buzz/shared/widgets/avatar_image.dart';
 import 'package:buzz/shared/widgets/frosted_app_bar.dart';
 import 'package:buzz/shared/widgets/frosted_scaffold.dart';
-import 'package:buzz/shared/widgets/flapping_bee.dart';
+import 'package:buzz/shared/widgets/cookie_loading_mark.dart';
 import 'package:buzz/shared/widgets/keyboard_dismiss_on_drag.dart';
 import 'package:buzz/shared/widgets/tabler_star_icon.dart';
 import 'package:buzz/shared/widgets/skeleton.dart';
@@ -9212,7 +9212,7 @@ void main() {
       expect(relaySession.publishedKinds, isEmpty);
     });
 
-    testWidgets('shows the flapping bee instead of an avatar while joining', (
+    testWidgets('shows the loading cookie instead of an avatar while joining', (
       tester,
     ) async {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -9245,26 +9245,32 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      final loadingBee = find.byKey(const ValueKey('huddle-loading-bee'));
-      expect(loadingBee, findsOneWidget);
-      expect(find.byType(FlappingBee), findsOneWidget);
-      expect(tester.widget<FlappingBee>(loadingBee).width, 60);
+      final loadingCookie = find.byKey(const ValueKey('huddle-loading-cookie'));
+      expect(loadingCookie, findsOneWidget);
+      expect(tester.widget<CookieLoadingMark>(loadingCookie).size, 60);
+      final cookiePainter = tester
+          .widgetList<CustomPaint>(
+            find.descendant(
+              of: loadingCookie,
+              matching: find.byType(CustomPaint),
+            ),
+          )
+          .map((paint) => paint.painter)
+          .whereType<CookiePainter>()
+          .single;
+      final initialFrame = cookiePainter.loop.value;
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(cookiePainter.loop.value, isNot(initialFrame));
       expect(find.bySemanticsLabel('Joining Huddle'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('huddle-participant-avatar-self')),
         findsNothing,
       );
-      final initialFlap = tester.widget<FlappingBee>(loadingBee).flapAmount;
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(
-        tester.widget<FlappingBee>(loadingBee).flapAmount,
-        isNot(initialFlap),
-      );
 
       connectGate.complete();
       await tester.pumpAndSettle();
 
-      expect(loadingBee, findsNothing);
+      expect(loadingCookie, findsNothing);
       expect(
         find.byKey(const ValueKey('huddle-participant-avatar-self')),
         findsOneWidget,
