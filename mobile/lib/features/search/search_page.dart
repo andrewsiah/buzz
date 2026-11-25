@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:buzz/shared/widgets/feedback_snackbar.dart';
 import 'package:buzz/shared/widgets/adaptive_conversation_pane.dart';
 
+import '../../shared/snack_blocks/snack_block_specs.dart';
 import '../../shared/widgets/duo_toolbar.dart';
 import '../../shared/widgets/navigation_backdrop.dart';
 import '../../shared/widgets/ios_navigation_bar.dart';

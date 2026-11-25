@@ -1,3 +1,5 @@
+import '../../shared/snack_blocks/snack_block.dart';
+import '../../shared/snack_blocks/snack_choice_scope.dart';
 import '../../shared/widgets/duo_toolbar.dart';
 import 'composer_geometry.dart';
 import 'message_author_visibility.dart';
@@ -119,6 +121,7 @@ import 'thread_replies_provider.dart';
 import 'open_channel_routes.dart';
 import 'reading_marks.dart';
 import 'timeline_message.dart';
+import '../../shared/moderation/moderation.dart';
 
 part 'channel_detail_page/message_list.dart';
 part 'channel_detail_page/jump_to_oldest_unread_button.dart';
@@ -656,11 +659,16 @@ class _ResolvedChannelDetailPage extends HookConsumerWidget {
     // changes. Format only when the events themselves change: the notifier
     // publishes a new list for every event change.
     final events = messagesState.value ?? const <NostrEvent>[];
+    final moderation = ref.watch(moderationProvider);
     final timelineMessages = useMemoized(
       () => resolvedChannel.isForum
           ? <TimelineMessage>[]
-          : formatTimeline(events, currentPubkey: currentPubkey),
-      [events, currentPubkey, resolvedChannel.isForum],
+          : formatTimeline(
+              events,
+              currentPubkey: currentPubkey,
+              moderationState: moderation,
+            ),
+      [events, currentPubkey, resolvedChannel.isForum, moderation],
     );
     final timelineEntries = buildMainTimelineEntries(
       // End events still update the original card through allMessages.
@@ -673,6 +681,79 @@ class _ResolvedChannelDetailPage extends HookConsumerWidget {
           .toList(),
       flat: personalChat,
       relaySummaries: ref.read(messagesProvider.notifier).threadSummaries,
+    );
+
+    Future<void> sendHere(
+      String content,
+      List<String> mentionPubkeys, {
+      List<List<String>> mediaTags = const <List<String>>[],
+    }) async {
+      if (!placementKnown) {
+        ref.invalidate(meGroupsProvider);
+        throw StateError('Reconnect to verify this chat before sending.');
+      }
+      var recipients = mentionPubkeys;
+      if (personalChat) {
+        if (!resolvedChannel.isPersonalChat(
+          ref.read(myPubkeyProvider),
+          mePlacement?.asData?.value.channels ?? const [],
+        )) {
+          throw StateError('Refresh Solo before sending to this chat.');
+        }
+        recipients = await meRecipients(
+          ref,
+          channel.id,
+          assistant.selected,
+          mentionPubkeys,
+        );
+      }
+      final donate = activeShareSuggestionDonor(ref);
+      final displayName = resolvedChannel.displayLabel(
+        currentPubkey: ref.read(myPubkeyProvider),
+      );
+      await sendMessage.call(
+        channelId: channel.id,
+        content: content,
+        mentionPubkeys: recipients,
+        channel: resolvedChannel,
+        mediaTags: mediaTags,
+      );
+      donate(
+        channelId: channel.id,
+        displayName: displayName,
+        recipientCount: resolvedChannel.memberCount - 1,
+      );
+    }
+
+    // An answer to a choices card is a normal message to its author; a
+    // card in a thread answers in that thread.
+    Future<void> answerChoice({
+      required String option,
+      required String authorPubkey,
+      String? rootId,
+    }) => rootId == null || personalChat || !placementKnown
+        ? sendHere(option, [authorPubkey])
+        : sendMessage.call(
+            channelId: channel.id,
+            content: option,
+            mentionPubkeys: [authorPubkey],
+            channel: resolvedChannel,
+            parentEventId: rootId,
+            rootEventId: rootId,
+          );
+    // Stable, so rows below the scope aren't rebuilt by every page build.
+    final latestAnswerChoice = useRef(answerChoice)..value = answerChoice;
+    final stableAnswerChoice = useCallback(
+      ({
+        required String option,
+        required String authorPubkey,
+        String? rootId,
+      }) => latestAnswerChoice.value(
+        option: option,
+        authorPubkey: authorPubkey,
+        rootId: rootId,
+      ),
+      const [],
     );
 
     return FrostedScaffold(
@@ -849,7 +930,7 @@ class _ResolvedChannelDetailPage extends HookConsumerWidget {
                             ),
                           ),
                           data: (events) {
-                            return _MessageList(
+                            final list = _MessageList(
                               welcomeAgent: welcomeAgent,
                               notifier: ref.watch(messagesProvider.notifier),
                               inlineTyping:
@@ -902,6 +983,12 @@ class _ResolvedChannelDetailPage extends HookConsumerWidget {
                                   ? restoreComposerFocusCallback
                                   : null,
                             );
+                            return showsComposer
+                                ? SnackChoiceScope(
+                                    send: stableAnswerChoice,
+                                    child: list,
+                                  )
+                                : list;
                           },
                         ),
                       ),
@@ -943,53 +1030,7 @@ class _ResolvedChannelDetailPage extends HookConsumerWidget {
                         channelName: resolvedChannel.isDm
                             ? ''
                             : resolvedChannel.name,
-                        onSend:
-                            (
-                              content,
-                              mentionPubkeys, {
-                              mediaTags = const <List<String>>[],
-                            }) async {
-                              if (!placementKnown) {
-                                ref.invalidate(meGroupsProvider);
-                                throw StateError(
-                                  'Reconnect to verify this chat before sending.',
-                                );
-                              }
-                              var recipients = mentionPubkeys;
-                              if (personalChat) {
-                                if (!resolvedChannel.isPersonalChat(
-                                  ref.read(myPubkeyProvider),
-                                  mePlacement?.asData?.value.channels ??
-                                      const [],
-                                )) {
-                                  throw StateError(
-                                    'Refresh Solo before sending to this chat.',
-                                  );
-                                }
-                                recipients = await meRecipients(
-                                  ref,
-                                  channel.id,
-                                  assistant.selected,
-                                  mentionPubkeys,
-                                );
-                              }
-                              final donate = activeShareSuggestionDonor(ref);
-                              final displayName = resolvedChannel.displayLabel(
-                                currentPubkey: ref.read(myPubkeyProvider),
-                              );
-                              await sendMessage.call(
-                                channelId: channel.id,
-                                content: content,
-                                mentionPubkeys: recipients,
-                                channel: resolvedChannel,
-                                mediaTags: mediaTags,
-                              );
-                              donate(
-                                channelId: channel.id,
-                                displayName: displayName,
-                                recipientCount: resolvedChannel.memberCount - 1,
-                              );
-                            },
+                        onSend: sendHere,
                       ),
                     ],
                   ),

@@ -239,9 +239,9 @@ final class NotificationService: UNNotificationServiceExtension {
     let fallback =
       (content.mutableCopy() as? UNMutableNotificationContent)
       ?? UNMutableNotificationContent()
-    fallback.title = "Buzz"
+    fallback.title = "Snack"
     fallback.subtitle = ""
-    fallback.body = "Open Buzz to view this message."
+    fallback.body = "Open Snack to view this message."
     fallback.threadIdentifier = ""
     var userInfo = fallback.userInfo
     userInfo.removeValue(forKey: BuzzPushNavigationTarget.userInfoKey)

@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../shared/moderation/moderation.dart';
 import '../../shared/relay/relay.dart';
 import '../channels/channel_management_provider.dart';
 import '../../shared/custom_emoji/custom_emoji.dart';
@@ -15,10 +16,14 @@ final forumPostsProvider = FutureProvider.family<ForumPostsResponse, String>((
   channelId,
 ) async {
   final session = ref.watch(relaySessionProvider.notifier);
+  // Blocked people's posts and reported posts never show (App Store 1.2).
+  final moderation = ref.watch(moderationProvider);
   final events = await session.fetchHistory(
     NostrFilters.forumPosts(channelId, limit: 50),
   );
-  return ForumPostsResponse.fromEvents(events);
+  return ForumPostsResponse.fromEvents(
+    events.where((e) => !moderation.hides(e.id, e.pubkey)).toList(),
+  );
 });
 
 /// Fetches a forum thread (root post + replies) from the relay.
@@ -28,6 +33,7 @@ final forumThreadProvider =
       ({String channelId, String eventId})
     >((ref, args) async {
       final session = ref.watch(relaySessionProvider.notifier);
+      final moderation = ref.watch(moderationProvider);
 
       final results = await Future.wait([
         // Root event lookup by id.
@@ -45,7 +51,9 @@ final forumThreadProvider =
       ]);
 
       final rootEvents = results[0];
-      final replyEvents = results[1];
+      final replyEvents = results[1]
+          .where((e) => !moderation.hides(e.id, e.pubkey))
+          .toList();
       if (rootEvents.isEmpty) {
         throw Exception('Forum thread not found: ${args.eventId}');
       }

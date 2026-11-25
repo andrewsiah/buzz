@@ -14,7 +14,7 @@ import 'agent_character_artwork.dart';
 double agentAvatarChoicesHeight(BuildContext context) {
   final label = TextPainter(
     text: TextSpan(
-      text: 'Buzzies',
+      text: 'Bees',
       style: context.textTheme.labelSmall?.copyWith(fontSize: 12),
     ),
     textScaler: MediaQuery.textScalerOf(context),

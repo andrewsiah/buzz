@@ -35,7 +35,8 @@ import '../../shared/syntax_highlight.dart';
 import '../../shared/theme/theme.dart';
 import '../../shared/snack_web/snack_web_launcher.dart';
 import '../../shared/snack_web/snack_web_links.dart';
-import '../../shared/snack_web/snack_web_only_block.dart';
+import '../../shared/snack_blocks/snack_block.dart';
+import '../../shared/snack_blocks/snack_block_specs.dart';
 import '../../shared/custom_emoji/custom_emoji.dart';
 import '../../shared/custom_emoji/custom_emoji_provider.dart';
 import '../../shared/custom_emoji/custom_emoji_render.dart';
@@ -73,6 +74,7 @@ part 'message_content/inline_components.dart';
 part 'message_content/token_pill.dart';
 part 'message_content/video_preview.dart';
 part 'message_content/link_actions.dart';
+part 'message_content/code_block.dart';
 
 typedef OpenDownloadedFile =
     Future<void> Function(
@@ -202,6 +204,13 @@ class MessageContent extends HookConsumerWidget {
   /// gutter while keeping its first image and count aligned with the body.
   final double mediaCarouselTrailingOverflow;
 
+  /// The message id a `snack-choices` card remembers its picked option by.
+  final String? choiceKey;
+
+  /// Posts an option picked on a `snack-choices` card; null lists the
+  /// options without buttons.
+  final SnackChoiceAnswer? onChoice;
+
   const MessageContent({
     super.key,
     required this.content,
@@ -229,6 +238,8 @@ class MessageContent extends HookConsumerWidget {
     this.edited = false,
     this.mediaCarouselLeadingOverflow = 0,
     this.mediaCarouselTrailingOverflow = 0,
+    this.choiceKey,
+    this.onChoice,
   });
 
   @override
@@ -452,18 +463,20 @@ class MessageContent extends HookConsumerWidget {
           // Desktop has no GitHub alerts: a `> [!NOTE]` quote stays a quote.
           alertBuilder: (_, alert) => alert.asBlockQuote(),
           codeBuilder: (context, name, code, closed) =>
-              switch (snackWebOnlyFenceLabel(name, code)) {
-                final label? => SnackWebOnlyBlock(
-                  label: label,
+              isSnackBlockLanguage(name)
+              ? SnackBlock(
+                  language: name,
+                  code: code,
                   ink: bubble && ownMessage ? ownTextColor : null,
-                ),
-                null => _MessageCodeBlock(
+                  choiceKey: choiceKey,
+                  onChoice: onChoice,
+                )
+              : _MessageCodeBlock(
                   name: name,
                   code: code,
                   bubble: bubble,
                   ink: bubble && ownMessage ? ownTextColor : null,
                 ),
-              },
           // Chips, media links and taps are handled in _buildLink, so the
           // package's own tap is not used.
           inlineLinkBuilder: (link) => _buildLink(
@@ -1058,138 +1071,6 @@ class _MediaPreviewFallback extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MessageCodeBlock extends HookWidget {
-  final String name;
-  final String code;
-
-  /// Whether the block sits inside a message bubble.
-  final bool bubble;
-
-  /// Text color on an accent bubble; null keeps the neutral highlighted card.
-  final Color? ink;
-
-  const _MessageCodeBlock({
-    required this.name,
-    required this.code,
-    this.bubble = false,
-    this.ink,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isCopied = useState(false);
-
-    Future<void> handleCopy() async {
-      await copyToClipboard(context, code, message: 'Code copied');
-      if (!context.mounted) return;
-      isCopied.value = true;
-      Future.delayed(const Duration(seconds: 2), () {
-        if (context.mounted) isCopied.value = false;
-      });
-    }
-
-    final ink = this.ink;
-    // A fence's closing newline would otherwise render as a blank last line.
-    final shownCode = code.trimRight();
-    final codeBaseStyle = TextStyle(
-      fontFamily: CodeStyle.fontFamily,
-      fontSize: CodeStyle.fontSize,
-      height: CodeStyle.lineHeight,
-      color: ink ?? context.colors.onSurface,
-    );
-    final isDark = context.theme.brightness == Brightness.dark;
-    final codeTheme = isDark ? highlightDarkTheme : highlightLightTheme;
-    // Syntax colors are tuned for neutral cards and lose contrast on accents.
-    final codeSpans = useMemoized(
-      () => ink == null
-          ? highlightCode(shownCode, name, codeTheme, codeBaseStyle)
-          : [TextSpan(text: shownCode)],
-      [code, name, isDark, ink],
-    );
-    return Container(
-      // In a bubble, the vertical margin brings the bubble's 8px vertical
-      // padding up to its 16px side padding, so the block is inset evenly and
-      // its corners stay concentric with the bubble's.
-      margin: bubble
-          ? const EdgeInsets.symmetric(vertical: Grid.xs - Grid.xxs)
-          : const EdgeInsets.only(top: Grid.half),
-      decoration: BoxDecoration(
-        color: ink == null
-            ? CodeStyle.background(context.colors)
-            : chatCodeTint(ink, 0.14),
-        borderRadius: BorderRadius.circular(
-          bubble ? Radii.container - Grid.xs : 12,
-        ),
-        border: Border.all(
-          color:
-              ink?.withValues(alpha: 0.24) ?? CodeStyle.border(context.colors),
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Even 12px insets; the right side also reserves the copy button.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Grid.twelve,
-              Grid.twelve,
-              Grid.twelve + 28,
-              Grid.twelve,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (name.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Grid.half),
-                    child: Text(
-                      name,
-                      style: context.textTheme.labelSmall?.copyWith(
-                        color: ink ?? context.colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: RichText(
-                    softWrap: false,
-                    text: TextSpan(style: codeBaseStyle, children: codeSpans),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: Grid.half + Grid.quarter,
-            right: Grid.half + Grid.quarter,
-            child: SizedBox(
-              width: 28,
-              height: 28,
-              child: IconButton(
-                onPressed: handleCopy,
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-                style: IconButton.styleFrom(
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                icon: Icon(
-                  isCopied.value ? BuzzIcons.check : BuzzIcons.copy,
-                  size: 14,
-                  color:
-                      ink ??
-                      (isCopied.value
-                          ? context.colors.primary
-                          : context.colors.onSurfaceVariant),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

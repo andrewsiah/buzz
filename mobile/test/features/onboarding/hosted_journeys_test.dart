@@ -156,7 +156,7 @@ void main() {
     f.beforeBrowserReturn = null;
     await f.tap(tester, 'or sign in with email');
     await f.settle(tester);
-    expect(find.text('Create my Buzz identity'), findsNothing);
+    expect(find.text('Create my Snack identity'), findsNothing);
     expect((await f.store.read())!.backup, isNotNull);
   });
 
@@ -243,7 +243,7 @@ void main() {
         );
       }
       await f.settle(tester);
-      expect(find.text('Create my Buzz identity'), findsNothing);
+      expect(find.text('Create my Snack identity'), findsNothing);
       if (importing) {
         expect(
           f.browserStarts,
@@ -260,13 +260,13 @@ void main() {
         // A new destination must not cancel the pending import choice.
         if (entry == 'import community link') {
           await f.link(tester, 'one');
-          expect(find.text('Create my Buzz identity'), findsNothing);
+          expect(find.text('Create my Snack identity'), findsNothing);
           expect(await f.store.read(), isNull);
           await f.link(tester, 'one', invite: false);
           await f.restart(tester);
           await f.tap(tester, 'Start login again');
         }
-        expect(find.text('Create my Buzz identity'), findsNothing);
+        expect(find.text('Create my Snack identity'), findsNothing);
         expect(await f.store.read(), isNull);
         await f.tap(tester, 'Import existing identity');
         await tester.enterText(
@@ -361,7 +361,7 @@ void main() {
     await f.settle(tester);
     expect(f.flow.stage, HostedFlowStage.setupIdentity);
     expect(f.probes, isEmpty);
-    expect(find.text('Create my Buzz identity'), findsNothing);
+    expect(find.text('Create my Snack identity'), findsNothing);
     expect(find.text('Import existing identity'), findsOneWidget);
     await f.tap(tester, 'Import existing identity');
     await tester.enterText(
@@ -1075,7 +1075,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         try {
-          expect(find.text('Create my Buzz identity'), findsNothing);
+          expect(find.text('Create my Snack identity'), findsNothing);
           expect(find.text('Import existing identity'), findsNothing);
           expect(find.byTooltip('Back').hitTestable(), findsNothing);
           // External teardown still fences pending enrollment.

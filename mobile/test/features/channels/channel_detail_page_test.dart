@@ -1916,7 +1916,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('channel-huddle-button')));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Keep Buzz open on the desktop'),
+        find.textContaining('Keep Snack open on the desktop'),
         findsOneWidget,
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Start Huddle'));
@@ -2004,7 +2004,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('channel-huddle-button')));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Keep Buzz open on the desktop'),
+        find.textContaining('Keep Snack open on the desktop'),
         findsOneWidget,
       );
       eligible.clear();

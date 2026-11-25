@@ -11,6 +11,7 @@ class _HuddleHistoryPage extends HookConsumerWidget {
     final provider = channelMessagesProvider(channelId);
     final messages = ref.watch(provider);
     final currentPubkey = ref.watch(currentPubkeyProvider);
+    final moderation = ref.watch(moderationProvider);
     final dateScrollActivity = useDateHeaderScrollActivity(channelId);
     final stickyDateHeaderState = useValueNotifier(
       StickyDateHeaderState.hidden,
@@ -27,6 +28,7 @@ class _HuddleHistoryPage extends HookConsumerWidget {
           final timeline = formatTimeline(
             events,
             currentPubkey: currentPubkey,
+            moderationState: moderation,
           ).where((message) => !message.isSystem).toList();
           if (timeline.isEmpty) {
             return const Center(child: Text('No messages in this Huddle.'));

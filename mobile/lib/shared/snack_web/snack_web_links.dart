@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import '../deeplink/deep_link.dart';
 
 /// Snack's web app, where the channel features this app leaves out (the
@@ -127,23 +125,4 @@ Uri? snackWebNativeLink(Uri uri, {required String relayBaseUrl}) {
       ? parseChannelDeepLink(link) != null
       : parseMessageDeepLink(link) != null;
   return valid ? link : null;
-}
-
-/// Fenced code block languages that only Snack's web app draws.
-const snackWebOnlyFences = {'buzz-chart'};
-
-/// The one-line label for a Snack-only fenced block, such as
-/// `Chart: Signups`, or null when [language] is an ordinary code block.
-String? snackWebOnlyFenceLabel(String language, String code) {
-  if (!snackWebOnlyFences.contains(language.trim().toLowerCase())) return null;
-  String? title;
-  try {
-    final spec = jsonDecode(code);
-    if (spec is Map && spec['title'] is String) {
-      title = (spec['title'] as String).trim();
-    }
-  } on FormatException {
-    // Half-written or invalid JSON still gets the plain label.
-  }
-  return title == null || title.isEmpty ? 'Chart' : 'Chart: $title';
 }

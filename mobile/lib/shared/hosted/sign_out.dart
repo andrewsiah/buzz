@@ -3,9 +3,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../community/community.dart';
 import '../community/community_provider.dart';
+import '../moderation/moderation.dart';
 import '../snack/snack_account.dart';
 import 'account_identity_store.dart';
 import 'hosted_environment.dart';
+import 'hosted_flow.dart' show HostedFlow;
 import 'hosted_flow_provider.dart';
 import '../widgets/confirmation_dialog.dart';
 import '../widgets/feedback_snackbar.dart';
@@ -28,41 +30,129 @@ Future<void> confirmSignOut(BuildContext context, WidgetRef ref) async {
       context: context,
       title: 'Sign out?',
       message:
-          'You’ll need to sign in again to use Buzz on this device. '
+          'You’ll need to sign in again to use Snack on this device. '
           'Your identities stay saved on this device.',
       confirmLabel: 'Sign out',
     );
     if (!confirmed || !context.mounted) return;
-    // Every key is saved before any community is removed, so a failure
-    // leaves each community with its only copy of its key. The Snack
-    // account's key is not: it lives on the Snack server, and a saved copy
-    // would let anyone with this device back in without the email code.
-    final snack = ref.read(snackAccountProvider);
-    final snackPubkey = await snack.accountPubkey();
-    for (final community in communities) {
-      if (SnackAccount.isAccountCommunity(community, snackPubkey)) continue;
-      await keepCommunityKey(community);
-    }
-    // The session ends before any community is removed, so the Sign in
-    // landing never shows it and nothing started there can be cancelled by
-    // it. Removed communities' push-lease revocations authenticate with the
-    // push-stop credential it leaves behind.
-    await flow?.endAccountSession();
-    // Forgets the Snack session here and ends it on the server if reachable.
-    await snack.signOut();
-    // The active community goes last, so removing the others never switches
-    // to and connects another one.
-    for (final community in [
-      ...communities.where((c) => c.id != active?.id),
-      ...communities.where((c) => c.id == active?.id),
-    ]) {
-      await list.removeCommunity(community.id);
-    }
+    final serverKeys = await ref.read(snackAccountProvider).serverHeldPubkeys();
+    await _signOutDevice(ref, list, flow, communities, active, serverKeys);
     // Reveal the Sign in landing under the page that signed out.
     navigator.popUntil((route) => route.isFirst);
   } catch (e) {
     messenger.showFeedbackSnackBar(
       SnackBar(content: Text('Failed to sign out: $e')),
+      kind: ToastKind.error,
+    );
+  }
+}
+
+/// Removes every community from this device and ends both sessions. Keys
+/// other than the Snack account's are kept in saved identities first.
+Future<void> _signOutDevice(
+  WidgetRef ref,
+  CommunityListNotifier list,
+  HostedFlow? flow,
+  List<Community> communities,
+  Community? active,
+  Set<String> serverKeys, {
+  bool accountDeleted = false,
+}) async {
+  // Every key is saved before any community is removed, so a failure
+  // leaves each community with its only copy of its key. The Snack
+  // account's key is not: it lives on the Snack server, and a saved copy
+  // would let anyone with this device back in without the email code.
+  final snack = ref.read(snackAccountProvider);
+  for (final community in communities) {
+    if (serverKeys.any(
+      (pubkey) => SnackAccount.isAccountCommunity(community, pubkey),
+    )) {
+      continue;
+    }
+    await keepCommunityKey(community);
+  }
+  // The session ends before any community is removed, so the Sign in
+  // landing never shows it and nothing started there can be cancelled by
+  // it. Removed communities' push-lease revocations authenticate with the
+  // push-stop credential it leaves behind.
+  await flow?.endAccountSession();
+  // Forgets the Snack session here and ends it on the server if reachable
+  // (a deleted account has no session left to end).
+  if (!accountDeleted) await snack.signOut();
+  // A deleted account's blocks and hidden messages go with it, so the next
+  // person to sign in on this device doesn't inherit them.
+  if (accountDeleted) ref.read(moderationProvider.notifier).clear();
+  // The active community goes last, so removing the others never switches
+  // to and connects another one.
+  for (final community in [
+    ...communities.where((c) => c.id != active?.id),
+    ...communities.where((c) => c.id == active?.id),
+  ]) {
+    await list.removeCommunity(community.id);
+  }
+}
+
+/// Settings › Delete account: after a confirmation, permanently deletes the
+/// Snack account on the server, then signs this device out. The account's key
+/// is not kept on the device afterwards.
+Future<void> confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final navigator = Navigator.of(context);
+  final list = ref.read(communityListProvider.notifier);
+  final flow = HostedEnvironment.enabled ? ref.read(hostedFlowProvider) : null;
+  final snack = ref.read(snackAccountProvider);
+  try {
+    final confirmed = await showDestructiveConfirmation(
+      context: context,
+      title: 'Delete your account?',
+      message:
+          'This permanently deletes your Snack account: your email, name, '
+          'key and sign-in records. It can’t be undone. Messages you '
+          'already posted stay in their communities until you or the '
+          'community’s owner deletes them.',
+      confirmLabel: 'Delete account',
+    );
+    if (!confirmed || !context.mounted) return;
+    final snackPubkey = await snack.accountPubkey();
+    if (snackPubkey == null) throw const SnackSignedOut();
+    final communities = await ref.read(communityListProvider.future);
+    final active = await ref.read(activeCommunityProvider.future);
+    await snack.deleteAccount();
+    try {
+      await _signOutDevice(
+        ref,
+        list,
+        flow,
+        communities,
+        active,
+        await snack.serverHeldPubkeys(),
+        accountDeleted: true,
+      );
+    } catch (_) {
+      messenger.showFeedbackSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account was deleted, but this device didn’t finish '
+            'signing out. Use Sign out to finish.',
+          ),
+        ),
+        kind: ToastKind.error,
+      );
+      return;
+    }
+    navigator.popUntil((route) => route.isFirst);
+    messenger.showFeedbackSnackBar(
+      const SnackBar(content: Text('Your Snack account was deleted.')),
+      kind: ToastKind.success,
+    );
+  } on SnackSignedOut {
+    messenger.showFeedbackSnackBar(
+      const SnackBar(content: Text('Sign in again, then delete your account.')),
+      kind: ToastKind.error,
+    );
+  } catch (e) {
+    messenger.showFeedbackSnackBar(
+      SnackBar(content: Text('Couldn’t delete your account: $e')),
       kind: ToastKind.error,
     );
   }

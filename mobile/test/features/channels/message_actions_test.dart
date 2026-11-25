@@ -742,14 +742,16 @@ void main() {
           },
         );
         expect(find.byType(BottomSheet), findsOneWidget);
-        expect(find.byType(SheetActionSection), findsNWidgets(3));
-        expect(find.byType(AppListCard), findsNWidgets(3));
+        // Someone else's message also gets Report and Block.
+        expect(find.byType(SheetActionSection), findsNWidgets(4));
+        expect(find.byType(AppListCard), findsNWidgets(4));
         expect(captures, 0);
         expect(harness.sourceHidden.value, isFalse);
         for (final label in [
           'Mark unread',
           'Follow thread',
           'Copy text',
+          'Report message',
           'Edit message',
           'Delete message',
         ]) {
