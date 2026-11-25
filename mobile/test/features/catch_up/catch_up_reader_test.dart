@@ -7,6 +7,8 @@ import 'package:buzz/features/catch_up/catch_up_sources.dart';
 import 'package:buzz/features/channels/channel.dart';
 import 'package:buzz/features/channels/unread_badge/observed_unread_event.dart';
 import 'package:buzz/shared/read_state/read_state_provider.dart';
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -73,6 +75,7 @@ void main() {
       },
       readState: () => const ReadStateState.inert(),
       writes: writes,
+      evidenceComplete: (_) => true,
     );
   });
 
@@ -150,12 +153,24 @@ void main() {
 
     late Map<String, int> marks;
     late Map<String, String> forced;
+    late Map<String, int> synced;
+    late List<ObservedUnreadEvent> observed;
+    late bool complete;
+    late Completer<void> settled;
+    late List<ObservedUnreadEvent> uncounted;
+    late int waits;
     late MobileCatchUpReader streamReader;
     late RecordingWrites log;
 
-    void build(List<ObservedUnreadEvent> observed) {
+    void build(List<ObservedUnreadEvent> initial) {
       marks = {};
       forced = {};
+      synced = {};
+      observed = initial;
+      complete = true;
+      settled = Completer<void>();
+      uncounted = [];
+      waits = 0;
       log = _MarkingWrites(marks);
       streamReader = MobileCatchUpReader(
         evidence: () => {
@@ -176,10 +191,24 @@ void main() {
             forcedUnreadContexts: forced,
           ),
         },
-        readState: () => const ReadStateState.inert(),
+        readState: () => ReadStateState(
+          isReady: true,
+          pubkey: 'me',
+          contexts: {...synced, ...marks},
+          version: 1,
+        ),
         writes: log,
+        evidenceComplete: (_) => complete,
+        uncountedReplies: (_) => uncounted,
+        evidenceSettled: () {
+          waits++;
+          return settled.future;
+        },
       );
     }
+
+    Iterable<String> channelReads() =>
+        log.log.where((l) => l.startsWith('read room@'));
 
     const entries = [
       CatchUpEntry(
@@ -218,19 +247,18 @@ void main() {
           streamReader.flush();
           expect(log.log, contains('read msg:m1@$mentionAt'));
           // The channel's synced mark reads the mention, never the reply.
-          final channelReads = log.log.where((l) => l.startsWith('read room@'));
           if (mentionAt < replyAt) {
-            expect(channelReads, ['read room@$mentionAt']);
+            expect(channelReads(), ['read room@$mentionAt']);
           } else {
-            expect(channelReads, isEmpty);
+            expect(channelReads(), isEmpty);
           }
 
           // Reading the thread card syncs the mention once nothing older is
-          // unread.
+          // unread, and only once.
           readCard(streamReader, 'room:root', entries);
           async.flushMicrotasks();
           streamReader.flush();
-          expect(log.log.last, 'read room@$mentionAt');
+          expect(channelReads(), ['read room@$mentionAt']);
         });
       });
     }
@@ -242,7 +270,109 @@ void main() {
         readCard(streamReader, 'room', entries);
         async.flushMicrotasks();
         streamReader.flush();
-        expect(log.log.where((l) => l.startsWith('read room@')), isEmpty);
+        expect(channelReads(), isEmpty);
+      });
+    });
+
+    test('a web manual-unread override on the channel holds it back', () {
+      fakeAsync((async) {
+        build([streamEvent('m1', 130, mention: true)]);
+        synced.addAll({'ov_s:room': 1, 'ov_c:room': 0, 'ov_b:room': 50});
+        readCard(streamReader, 'room', entries);
+        async.flushMicrotasks();
+        streamReader.flush();
+        expect(log.log, contains('read msg:m1@130'));
+        expect(channelReads(), isEmpty);
+      });
+    });
+
+    // The review finding: a channel mark reads every message up to it, also
+    // ones this device has not fetched yet. An older unread message missing
+    // here must stay unread on every device.
+    test('an unread message this device has not fetched yet stays unread', () {
+      fakeAsync((async) {
+        build([streamEvent('m1', 130, mention: true)]);
+        complete = false;
+        readCard(streamReader, 'room', entries);
+        async.flushMicrotasks();
+        streamReader.flush();
+        expect(log.log, contains('read msg:m1@130'));
+        expect(channelReads(), isEmpty);
+
+        // The catch-up brings an older unread message; evidence is complete.
+        final older = streamEvent('u0', 110);
+        observed = [...observed, older];
+        complete = true;
+        settled.complete();
+        async.flushMicrotasks();
+        expect(channelReads(), isEmpty);
+        final readAt = observedUnreadEventReadAt(
+          older,
+          'room',
+          (context) => marks[context],
+        );
+        expect(readAt == null || readAt < older.createdAt, isTrue);
+
+        // Once that message is read here, the mention syncs.
+        streamReader.markMessagesRead(['u0']);
+        async.flushMicrotasks();
+        streamReader.flush();
+        expect(channelReads(), ['read room@130']);
+      });
+    });
+
+    test('a reply another device may count holds it back until read', () {
+      fakeAsync((async) {
+        build([streamEvent('m1', 130, mention: true)]);
+        // A reply in a thread this device does not follow.
+        uncounted = [streamEvent('x1', 120, rootId: 'elsewhere')];
+        readCard(streamReader, 'room', entries);
+        async.flushMicrotasks();
+        streamReader.flush();
+        expect(channelReads(), isEmpty);
+        // Read on the web (its thread mark syncs here), the mention syncs.
+        synced['thread:elsewhere'] = 120;
+        readCard(streamReader, 'room:root', entries);
+        async.flushMicrotasks();
+        streamReader.flush();
+        expect(channelReads(), ['read room@130']);
+      });
+    });
+
+    test('evidence that settles still incomplete waits without looping', () {
+      fakeAsync((async) {
+        build([streamEvent('m1', 130, mention: true)]);
+        complete = false;
+        settled.complete();
+        readCard(streamReader, 'room', entries);
+        async.flushMicrotasks();
+        streamReader.flush();
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 1));
+        expect(waits, 1);
+        expect(channelReads(), isEmpty);
+        // A later evidence change retries it.
+        complete = true;
+        streamReader.retryWaitingSyncs();
+        expect(channelReads(), ['read room@130']);
+      });
+    });
+
+    test('a mention waiting for evidence syncs once it is complete', () {
+      fakeAsync((async) {
+        build([streamEvent('m1', 130, mention: true)]);
+        complete = false;
+        readCard(streamReader, 'room', entries);
+        async.flushMicrotasks();
+        streamReader.flush();
+        expect(channelReads(), isEmpty);
+        complete = true;
+        settled.complete();
+        async.flushMicrotasks();
+        expect(channelReads(), ['read room@130']);
+        // Nothing waits any more: a later retry writes nothing new.
+        streamReader.retryWaitingSyncs();
+        expect(channelReads(), hasLength(1));
       });
     });
   });

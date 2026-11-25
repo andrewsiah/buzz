@@ -252,6 +252,7 @@ class ChannelsNotifier extends AsyncNotifier<List<Channel>> {
       if (next.status != SessionStatus.connected) return;
       if (previous?.status != SessionStatus.connected) {
         connectionVersion++;
+        _noteUnreadReconnect();
         _checkSavedDirectoryOnConnect();
       }
       if (waitingForInitialConnection && !connected.isCompleted) {
@@ -867,17 +868,7 @@ class ChannelsNotifier extends AsyncNotifier<List<Channel>> {
         _writeThreadInterestStores(myPk);
       }
 
-      if (myPk != null &&
-          shouldNotifyForEvent(
-            event,
-            myPk,
-            participatedRootIds: _participatedRootIds,
-            followedRootIds: _followedRootIds(),
-            authoredRootIds: _authoredRootIds,
-            mutedChannelIds: mutedChannelIds,
-            channelId: channel.id,
-          ) &&
-          _recordUnreadEvent(channel, event, myPk)) {
+      if (_recordLiveUnreadEvent(channel, event, myPk, mutedChannelIds)) {
         final eventTime = DateTime.fromMillisecondsSinceEpoch(
           event.createdAt * 1000,
           isUtc: true,

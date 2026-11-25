@@ -163,7 +163,9 @@ extension _ChannelsNotifierLiveSubscriptions on ChannelsNotifier {
             return;
           }
           if (status == RelaySubscriptionStatus.retrying) {
-            subscription.interrupted = true;
+            subscription
+              ..interrupted = true
+              ..interruptions += 1;
           } else if (subscription.interrupted) {
             subscription.interrupted = false;
             _reopenedLiveChunks.add(chunkKey);
@@ -525,6 +527,8 @@ class _LiveChunkSubscription {
   void Function()? unsubscribe;
   // Closed by the relay and being reopened by RelaySession itself.
   bool interrupted = false;
+  // SNACK: how often it was, so Catch-up knows events may be missing.
+  int interruptions = 0;
 }
 
 /// Retries a failed subscription or read after a jittered backoff that starts
