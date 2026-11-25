@@ -431,7 +431,7 @@ class SnackAccount {
         'community': community,
         'author': author.toLowerCase(),
         'reason': reason,
-        if (eventId != null) 'eventId': eventId,
+        'eventId': ?eventId,
         if (content != null && content.isNotEmpty)
           'content': clip(content, 2000),
         if (note != null && note.trim().isNotEmpty)

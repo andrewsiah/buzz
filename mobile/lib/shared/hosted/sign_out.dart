@@ -6,6 +6,7 @@ import '../community/community_provider.dart';
 import '../snack/snack_account.dart';
 import 'account_identity_store.dart';
 import 'hosted_environment.dart';
+import 'hosted_flow.dart' show HostedFlow;
 import 'hosted_flow_provider.dart';
 import '../widgets/confirmation_dialog.dart';
 import '../widgets/feedback_snackbar.dart';

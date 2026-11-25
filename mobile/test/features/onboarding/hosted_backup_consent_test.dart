@@ -265,7 +265,7 @@ void main() {
         openBindLink();
         await f.settle(tester);
         expect(
-          find.text('Create my Buzz identity').hitTestable(),
+          find.text('Create my Snack identity').hitTestable(),
           findsOneWidget,
         );
         expect(
@@ -298,7 +298,7 @@ void main() {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         openBindLink();
         await f.settle(tester);
-        await f.tap(tester, 'Create my Buzz identity');
+        await f.tap(tester, 'Create my Snack identity');
         expect(f.flow.problem, HostedFlowProblem.unsupportedPlatform);
         expect(await f.store.read(), isNull);
         expect(f.bound, isNull);
@@ -310,7 +310,7 @@ void main() {
         await f.flow.retry();
         await f.settle(tester);
         expect(await f.store.read(), isNull);
-        await f.tap(tester, 'Create my Buzz identity');
+        await f.tap(tester, 'Create my Snack identity');
         final saved = (await f.store.read())!;
         expect(f.bound, saved.pubkey);
         expect(
