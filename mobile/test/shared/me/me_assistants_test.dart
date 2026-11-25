@@ -123,6 +123,7 @@ void main() {
     _Relay relay, {
     Set<String> archived = const {},
     String? viewer,
+    Map<String, String> snack = const {},
   }) {
     relay.inventory ??= [listing(agent.public)];
     final sync = MeSync(
@@ -140,6 +141,7 @@ void main() {
         relaySessionProvider.overrideWith(() => relay),
         meSyncProvider.overrideWithValue(sync),
         identityArchivesProvider.overrideWith((ref) async => archived),
+        meSnackAgentsReadProvider.overrideWithValue(() async => snack),
         if (viewer != null) myPubkeyProvider.overrideWithValue(viewer),
       ],
     );
@@ -181,6 +183,28 @@ void main() {
           record.createdAt == 2 || record.createdAt == 4,
         );
       }
+    },
+  );
+
+  test(
+    'Snack Cloud agents are offered only with the owner signature on the relay',
+    () async {
+      // Snack accounts have no desktop inventory (kind 30177): their agents
+      // live in Snack Cloud. Before, the list was empty and Solo made the
+      // owner pick from nothing.
+      final hosted = nostr.Keys.generate();
+      final stranger = nostr.Keys.generate();
+      final relay = _Relay([
+        [profile(hosted, ownedBy: owner), profile(stranger, ownedBy: other)],
+      ], inventory: []);
+      final container = setup(
+        relay,
+        snack: {hosted.public: 'Kiss', stranger.public: 'Not mine'},
+      );
+      final choices = await container.read(meAssistantsProvider.future);
+      expect(choices.map((agent) => (agent.pubkey, agent.displayName)), [
+        (hosted.public, 'Kiss'),
+      ]);
     },
   );
 
