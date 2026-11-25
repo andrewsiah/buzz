@@ -123,6 +123,14 @@ class ModerationNotifier extends Notifier<ModerationState> {
     _set(ModerationState(blocked: next, hiddenMessages: state.hiddenMessages));
   }
 
+  /// Forgets every block and hidden message on this device (account deleted:
+  /// the next person to sign in here shouldn't inherit them).
+  void clear() {
+    currentModeration = ModerationState.empty;
+    state = ModerationState.empty;
+    _prefs?.remove(storageKey);
+  }
+
   void hideMessage(String eventId) {
     if (eventId.isEmpty) return;
     _set(

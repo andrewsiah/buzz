@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../community/community.dart';
 import '../community/community_provider.dart';
+import '../moderation/moderation.dart';
 import '../snack/snack_account.dart';
 import 'account_identity_store.dart';
 import 'hosted_environment.dart';
@@ -78,6 +79,9 @@ Future<void> _signOutDevice(
   // Forgets the Snack session here and ends it on the server if reachable
   // (a deleted account has no session left to end).
   if (!accountDeleted) await snack.signOut();
+  // A deleted account's blocks and hidden messages go with it, so the next
+  // person to sign in on this device doesn't inherit them.
+  if (accountDeleted) ref.read(moderationProvider.notifier).clear();
   // The active community goes last, so removing the others never switches
   // to and connects another one.
   for (final community in [

@@ -99,26 +99,35 @@ class _ReportSheet extends HookConsumerWidget {
       final snack = ref.read(snackAccountProvider);
       final block = alsoBlock.value;
       final navigator = Navigator.of(context);
+      // Hide (and block) here first: that works offline and without a Snack
+      // sign-in, even when the report itself can't be sent.
+      if (isMessage) moderation.hideMessage(eventId!);
+      if (block) moderation.block(authorPubkey, name: authorName);
       try {
+        final community = await _communityOrigin(ref);
+        if (community.isEmpty) {
+          throw const SnackAccountException('No community is open.');
+        }
         await snack.report(
           kind: isMessage ? 'message' : 'user',
-          community: await _communityOrigin(ref),
+          community: community,
           author: authorPubkey,
           reason: picked,
           eventId: eventId,
           content: content,
           blocked: block,
         );
-      } on SnackAccountException catch (e) {
+      } catch (e) {
         if (!context.mounted) return;
         busy.value = false;
+        final hidden = isMessage || block
+            ? ' ${isMessage ? 'The message' : name} is hidden on this phone.'
+            : '';
         error.value = e is SnackSignedOut
-            ? 'Sign in again to send a report.'
-            : e.message;
+            ? 'Sign in to Snack again to send the report.$hidden'
+            : 'The report didn’t send. Try again.$hidden';
         return;
       }
-      if (isMessage) moderation.hideMessage(eventId!);
-      if (block) moderation.block(authorPubkey, name: authorName);
       if (context.mounted) navigator.pop(true);
     }
 
@@ -265,7 +274,8 @@ class BlockedPeopleList extends ConsumerWidget {
             ),
             trailing: Semantics(
               button: true,
-              label: 'Unblock ${entry.value.trim().isEmpty ? 'this person' : entry.value}',
+              label:
+                  'Unblock ${entry.value.trim().isEmpty ? 'this person' : entry.value}',
               excludeSemantics: true,
               child: TextButton(
                 onPressed: () =>

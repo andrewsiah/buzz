@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:buzz/features/channels/timeline_message.dart';
+import 'package:buzz/features/forum/forum_provider.dart';
 import 'package:buzz/shared/moderation/moderation.dart';
 import 'package:buzz/shared/relay/relay.dart';
 import 'package:buzz/shared/snack/snack_account.dart';
@@ -11,6 +12,32 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _ForumSession extends RelaySessionNotifier {
+  _ForumSession(this.events);
+  final List<NostrEvent> events;
+
+  @override
+  SessionState build() => const SessionState(status: SessionStatus.connected);
+
+  @override
+  Future<List<NostrEvent>> fetchHistory(
+    NostrFilter filter, {
+    Duration timeout = const Duration(seconds: 8),
+  }) async => events;
+}
+
+NostrEvent _post(String id, String pubkey) => NostrEvent(
+  id: id,
+  pubkey: pubkey,
+  createdAt: 1000,
+  kind: 45001,
+  tags: const [
+    ['h', 'ch1'],
+  ],
+  content: 'post $id',
+  sig: '',
+);
 
 final _alice = 'a' * 64;
 final _bob = 'b' * 64;
@@ -113,4 +140,58 @@ void main() {
     await expectLater(account.deleteAccount(), throwsA(isA<SnackSignedOut>()));
     expect(requests, hasLength(2));
   });
+
+  test(
+    'forum posts from blocked people and reported posts are hidden',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [
+          savedPrefsProvider.overrideWithValue(prefs),
+          relaySessionProvider.overrideWith(
+            () => _ForumSession([
+              _post('p1', _alice),
+              _post('p2', _bob),
+              _post('p3', _alice),
+            ]),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      Future<List<String>> ids() async => (await container.read(
+        forumPostsProvider('ch1').future,
+      )).posts.map((p) => p.eventId).toList();
+
+      expect(await ids(), unorderedEquals(['p1', 'p2', 'p3']));
+      container.read(moderationProvider.notifier).block(_bob);
+      expect(await ids(), unorderedEquals(['p1', 'p3']));
+      container.read(moderationProvider.notifier).hideMessage('p3');
+      expect(await ids(), ['p1']);
+      currentModeration = ModerationState.empty;
+    },
+  );
+
+  test(
+    'clear forgets blocks and hidden messages, also after a restart',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var container = ProviderContainer(
+        overrides: [savedPrefsProvider.overrideWithValue(prefs)],
+      );
+      container.read(moderationProvider.notifier)
+        ..block(_bob, name: 'Bob')
+        ..hideMessage('m1');
+      container.read(moderationProvider.notifier).clear();
+      expect(container.read(moderationProvider).isEmpty, isTrue);
+      expect(currentModeration.isEmpty, isTrue);
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [savedPrefsProvider.overrideWithValue(prefs)],
+      );
+      expect(container.read(moderationProvider).isEmpty, isTrue);
+      container.dispose();
+    },
+  );
 }
