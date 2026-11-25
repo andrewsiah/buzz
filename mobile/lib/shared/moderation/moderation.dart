@@ -67,8 +67,24 @@ final _hex64 = RegExp(r'^[0-9a-fA-F]{64}$');
 /// rebuild when it changes.
 ModerationState currentModeration = ModerationState.empty;
 
+/// Reads the saved state into [currentModeration] at app start, so the
+/// first timeline formatted already hides blocked people.
+void loadSavedModeration(SharedPreferences prefs) {
+  currentModeration = ModerationNotifier.readSaved(prefs);
+}
+
 class ModerationNotifier extends Notifier<ModerationState> {
   static const storageKey = 'snack_moderation_v1';
+
+  static ModerationState readSaved(SharedPreferences? prefs) {
+    final raw = prefs?.getString(storageKey);
+    if (raw == null) return ModerationState.empty;
+    try {
+      return ModerationState.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return ModerationState.empty;
+    }
+  }
 
   SharedPreferences? get _prefs {
     try {
@@ -80,13 +96,7 @@ class ModerationNotifier extends Notifier<ModerationState> {
 
   @override
   ModerationState build() {
-    var loaded = ModerationState.empty;
-    final raw = _prefs?.getString(storageKey);
-    if (raw != null) {
-      try {
-        loaded = ModerationState.fromJson(jsonDecode(raw));
-      } catch (_) {}
-    }
+    final loaded = readSaved(_prefs);
     currentModeration = loaded;
     return loaded;
   }

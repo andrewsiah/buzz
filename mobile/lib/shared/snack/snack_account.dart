@@ -215,6 +215,7 @@ class SnackAccount {
 
   static const _sessionKey = 'snack_session_v1';
   static const _pubkeyKey = 'snack_account_pubkey_v1';
+  static const _deletedPubkeyKey = 'snack_deleted_account_pubkey_v1';
   static const _timeout = Duration(seconds: 30);
 
   final http.Client Function() _client;
@@ -405,8 +406,28 @@ class SnackAccount {
       body: {'confirm': 'delete'},
       authenticated: true,
     );
+    final pubkey = await _storage.read(key: _pubkeyKey);
+    // Remembered so a later sign-out never keeps the deleted account's key
+    // as a saved identity, even when this device's clean-up fails midway.
+    if (pubkey != null && pubkey.isNotEmpty) {
+      await _storage.write(key: _deletedPubkeyKey, value: pubkey);
+    }
     await _storage.delete(key: _sessionKey);
     await _storage.delete(key: _pubkeyKey);
+  }
+
+  /// Pubkeys whose keys live on (or were deleted from) the Snack server, so
+  /// signing out must not copy them into saved identities.
+  Future<Set<String>> serverHeldPubkeys() async {
+    final current = await accountPubkey();
+    String? deleted;
+    try {
+      deleted = await _storage.read(key: _deletedPubkeyKey);
+    } catch (_) {}
+    return {
+      if (current != null) current.toLowerCase(),
+      if (deleted != null && deleted.isNotEmpty) deleted.toLowerCase(),
+    };
   }
 
   /// Sends a report about a message or person to Snack for a person to

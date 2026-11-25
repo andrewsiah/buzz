@@ -94,29 +94,32 @@ class _ReportSheet extends HookConsumerWidget {
       if (picked == null || busy.value) return;
       busy.value = true;
       error.value = null;
+      // Read everything before the await: the sheet may close while sending.
+      final moderation = ref.read(moderationProvider.notifier);
+      final snack = ref.read(snackAccountProvider);
+      final block = alsoBlock.value;
+      final navigator = Navigator.of(context);
       try {
-        await ref
-            .read(snackAccountProvider)
-            .report(
-              kind: isMessage ? 'message' : 'user',
-              community: await _communityOrigin(ref),
-              author: authorPubkey,
-              reason: picked,
-              eventId: eventId,
-              content: content,
-              blocked: alsoBlock.value,
-            );
+        await snack.report(
+          kind: isMessage ? 'message' : 'user',
+          community: await _communityOrigin(ref),
+          author: authorPubkey,
+          reason: picked,
+          eventId: eventId,
+          content: content,
+          blocked: block,
+        );
       } on SnackAccountException catch (e) {
+        if (!context.mounted) return;
         busy.value = false;
         error.value = e is SnackSignedOut
             ? 'Sign in again to send a report.'
             : e.message;
         return;
       }
-      final moderation = ref.read(moderationProvider.notifier);
       if (isMessage) moderation.hideMessage(eventId!);
-      if (alsoBlock.value) moderation.block(authorPubkey, name: authorName);
-      if (context.mounted) Navigator.of(context).pop(true);
+      if (block) moderation.block(authorPubkey, name: authorName);
+      if (context.mounted) navigator.pop(true);
     }
 
     return SafeArea(
@@ -260,10 +263,15 @@ class BlockedPeopleList extends ConsumerWidget {
                   ? '${entry.key.substring(0, 12)}…'
                   : entry.value,
             ),
-            trailing: TextButton(
-              onPressed: () =>
-                  ref.read(moderationProvider.notifier).unblock(entry.key),
-              child: const Text('Unblock'),
+            trailing: Semantics(
+              button: true,
+              label: 'Unblock ${entry.value.trim().isEmpty ? 'this person' : entry.value}',
+              excludeSemantics: true,
+              child: TextButton(
+                onPressed: () =>
+                    ref.read(moderationProvider.notifier).unblock(entry.key),
+                child: const Text('Unblock'),
+              ),
             ),
           ),
       ],

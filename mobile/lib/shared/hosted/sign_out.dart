@@ -34,8 +34,8 @@ Future<void> confirmSignOut(BuildContext context, WidgetRef ref) async {
       confirmLabel: 'Sign out',
     );
     if (!confirmed || !context.mounted) return;
-    final snackPubkey = await ref.read(snackAccountProvider).accountPubkey();
-    await _signOutDevice(ref, list, flow, communities, active, snackPubkey);
+    final serverKeys = await ref.read(snackAccountProvider).serverHeldPubkeys();
+    await _signOutDevice(ref, list, flow, communities, active, serverKeys);
     // Reveal the Sign in landing under the page that signed out.
     navigator.popUntil((route) => route.isFirst);
   } catch (e) {
@@ -54,7 +54,7 @@ Future<void> _signOutDevice(
   HostedFlow? flow,
   List<Community> communities,
   Community? active,
-  String? snackPubkey, {
+  Set<String> serverKeys, {
   bool accountDeleted = false,
 }) async {
   // Every key is saved before any community is removed, so a failure
@@ -63,7 +63,11 @@ Future<void> _signOutDevice(
   // would let anyone with this device back in without the email code.
   final snack = ref.read(snackAccountProvider);
   for (final community in communities) {
-    if (SnackAccount.isAccountCommunity(community, snackPubkey)) continue;
+    if (serverKeys.any(
+      (pubkey) => SnackAccount.isAccountCommunity(community, pubkey),
+    )) {
+      continue;
+    }
     await keepCommunityKey(community);
   }
   // The session ends before any community is removed, so the Sign in
@@ -106,18 +110,32 @@ Future<void> confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
     );
     if (!confirmed || !context.mounted) return;
     final snackPubkey = await snack.accountPubkey();
+    if (snackPubkey == null) throw const SnackSignedOut();
     final communities = await ref.read(communityListProvider.future);
     final active = await ref.read(activeCommunityProvider.future);
     await snack.deleteAccount();
-    await _signOutDevice(
-      ref,
-      list,
-      flow,
-      communities,
-      active,
-      snackPubkey,
-      accountDeleted: true,
-    );
+    try {
+      await _signOutDevice(
+        ref,
+        list,
+        flow,
+        communities,
+        active,
+        await snack.serverHeldPubkeys(),
+        accountDeleted: true,
+      );
+    } catch (_) {
+      messenger.showFeedbackSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your account was deleted, but this device didn’t finish '
+            'signing out. Use Sign out to finish.',
+          ),
+        ),
+        kind: ToastKind.error,
+      );
+      return;
+    }
     navigator.popUntil((route) => route.isFirst);
     messenger.showFeedbackSnackBar(
       const SnackBar(content: Text('Your Snack account was deleted.')),

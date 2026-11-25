@@ -106,7 +106,7 @@ void main() {
       await tester.tap(find.text('Other ways to join'));
       await tester.pump();
     }
-    expect(find.bySemanticsLabel('Buzz'), findsOneWidget);
+    expect(find.bySemanticsLabel('Snack'), findsOneWidget);
     expect(find.text('Sign in with email').hitTestable(), findsNothing);
     expect(
       find.text('or sign in with email'),

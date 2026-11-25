@@ -194,6 +194,7 @@ class ThreadDetailPage extends HookConsumerWidget {
             // keeps a temporarily unavailable head visible without restoring
             // a head that was deleted while this page was open.
             if (!liveDeletionHidesHead &&
+                !currentModeration.hides(threadHead.id, threadHead.pubkey) &&
                 !fetchedReplies.any((message) => message.id == threadHead.id))
               threadHead,
             ...fetchedReplies,

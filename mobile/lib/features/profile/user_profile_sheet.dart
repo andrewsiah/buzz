@@ -499,7 +499,8 @@ class UserProfileSheet extends HookConsumerWidget {
                       ),
                       if (agentSettings != null)
                         Builder(builder: agentSettings!),
-                      if (pk != currentPubkey)
+                      if (currentPubkey != null &&
+                          pk != currentPubkey.toLowerCase())
                         _ProfileSafetyActions(pubkey: pk, name: displayName),
                     ] else ...[
                       Row(
@@ -537,7 +538,8 @@ class UserProfileSheet extends HookConsumerWidget {
                       SizedBox(height: contextualActionsSpacing),
                       if (contextualActions != null)
                         Builder(builder: contextualActions!),
-                      if (pk != currentPubkey)
+                      if (currentPubkey != null &&
+                          pk != currentPubkey.toLowerCase())
                         _ProfileSafetyActions(pubkey: pk, name: displayName),
                     ],
                   ],
