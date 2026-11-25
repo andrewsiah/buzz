@@ -9,6 +9,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../shared/profile/user_cache_provider.dart';
 import '../../shared/profile/user_profile.dart';
+import '../../shared/snack_blocks/snack_block.dart';
+import '../../shared/snack_blocks/snack_block_specs.dart';
 import '../../shared/theme/buzz_icons.dart';
 import '../../shared/theme/theme.dart';
 import '../channels/channel.dart';

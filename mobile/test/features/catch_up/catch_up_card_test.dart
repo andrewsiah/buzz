@@ -10,6 +10,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:hooks_riverpod/misc.dart';
 
 import '../../helpers/widget_helpers.dart';
+import '../../shared/snack_blocks/snack_progress_sample.dart';
 
 final launch = Channel(
   id: 'launch',
@@ -26,7 +27,10 @@ final launch = Channel(
 final author = 'b' * 64;
 
 /// Card content, from the same providers the app reads, faked at the seam.
-List<Override> cardOverrides({List<CatchUpMessage>? timeline}) => [
+List<Override> cardOverrides({
+  List<CatchUpMessage>? timeline,
+  String reply = 'thread reply',
+}) => [
   catchUpEvidenceProvider.overrideWithValue(const {}),
   catchUpMuteProvider.overrideWithValue(
     CatchUpMuteControl(muted: const {}, setMuted: (_, _) {}),
@@ -64,6 +68,12 @@ List<Override> cardOverrides({List<CatchUpMessage>? timeline}) => [
         content: 'thread ${args.rootId}',
         createdAt: 100,
       ),
+      CatchUpMessage(
+        id: 'reply',
+        pubkey: author,
+        content: reply,
+        createdAt: 102,
+      ),
     ]),
   ),
 ];
@@ -72,11 +82,15 @@ Finder threadRegion() => find.byWidgetPredicate(
   (widget) => widget is Semantics && widget.properties.label == 'Thread',
 );
 
-Future<List<String>> pumpCard(WidgetTester tester, {String? rootId}) async {
+Future<List<String>> pumpCard(
+  WidgetTester tester, {
+  String? rootId,
+  String reply = 'thread reply',
+}) async {
   final opened = <String>[];
   await tester.pumpWidget(
     WidgetHelpers.testable(
-      overrides: cardOverrides(),
+      overrides: cardOverrides(reply: reply),
       child: CatchUpCard(
         channel: launch,
         channelId: 'launch',
@@ -127,6 +141,24 @@ void main() {
     );
     expect(find.text('message later'), findsNothing);
     expect(find.text('New replies in a thread'), findsOneWidget);
+  });
+
+  testWidgets('shows an agent progress card in a thread, not raw JSON', (
+    tester,
+  ) async {
+    await pumpCard(tester, rootId: 'root', reply: snackProgressMessage);
+    expect(
+      find.descendant(
+        of: threadRegion(),
+        matching: find.byKey(const ValueKey('snack-progress-card')),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Working on this in the background.'), findsOneWidget);
+    expect(find.text('Sign in thesvpn X account'), findsOneWidget);
+    expect(find.textContaining('"version"'), findsNothing);
+    expect(find.textContaining('snack-progress'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(

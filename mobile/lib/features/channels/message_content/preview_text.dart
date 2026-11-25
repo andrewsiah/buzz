@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../shared/deeplink/deep_link.dart';
 import '../../../shared/mentions/mention_bindings.dart';
+import '../../../shared/snack_blocks/snack_block_specs.dart';
 import '../message_media.dart';
 import 'buzz_link_label.dart';
 import 'channel_token_pattern.dart';
@@ -178,6 +179,30 @@ Iterable<({String text, bool code, int end})> _keptLines(
     // A fence opens at any line starting with backticks and closes only at a
     // line holding nothing else, as in gpt_markdown.
     if (!fenceOpen && line.startsWith('```') || fenceOpen && line == '```') {
+      final language = fenceOpen
+          ? ''
+          : line.substring(3).trim().split(RegExp(r'\s')).first;
+      if (isSnackBlockLanguage(language)) {
+        // A Snack card shows as its one-line summary, never its JSON.
+        // Bounded, so a long or unclosed card keeps the preview read short.
+        final from = math.min(start, content.length);
+        final limit = math.min(content.length, from + _maxCardLength);
+        final close = _closingFence
+            .allMatches(content.substring(0, limit), from)
+            .firstOrNull;
+        final codeEnd = close?.start ?? limit;
+        final blockEnd = close?.end ?? limit;
+        final code = close == null ? '' : content.substring(from, codeEnd);
+        // Without a close in reach, the rest is the card: stop reading.
+        start = close == null ? content.length + 1 : blockEnd + 1;
+        kept++;
+        yield (
+          text: snackBlockSummary(language, code) ?? language,
+          code: true,
+          end: blockEnd,
+        );
+        continue;
+      }
       fenceOpen = !fenceOpen;
       continue;
     }
@@ -197,6 +222,11 @@ Iterable<({String text, bool code, int end})> _keptLines(
 
 const _maxLineLength = 2000;
 const _maxScanLength = 8 * _maxLineLength;
+
+/// Longest Snack card block read for its summary; a longer one keeps a
+/// generic label.
+const _maxCardLength = 64 * 1024;
+final _closingFence = RegExp(r'^[ \t]*```[ \t]*$', multiLine: true);
 const _backslash = 0x5C;
 const _newline = 0x0A;
 const _backtick = 0x60;

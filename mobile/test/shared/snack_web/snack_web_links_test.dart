@@ -100,18 +100,4 @@ void main() {
       'https://wesnack.app/',
     );
   });
-
-  test('labels Snack-only fenced blocks and leaves code alone', () {
-    const cases = <(String, String), String?>{
-      ('buzz-chart', '{"type":"bar","title":"Signups"}'): 'Chart: Signups',
-      (' BUZZ-CHART ', '{"type":"bar"}'): 'Chart',
-      ('buzz-chart', '{"type":'): 'Chart',
-      ('buzz-chart', '[1, 2]'): 'Chart',
-      ('json', '{"title":"Signups"}'): null,
-      ('', 'plain'): null,
-    };
-    for (final MapEntry(key: (language, code), :value) in cases.entries) {
-      expect(snackWebOnlyFenceLabel(language, code), value, reason: language);
-    }
-  });
 }

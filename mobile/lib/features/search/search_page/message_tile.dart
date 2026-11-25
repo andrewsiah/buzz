@@ -138,7 +138,7 @@ class _MessageTile extends ConsumerWidget {
   ) {
     if (hit.content.length > _richSearchPreviewLimit) {
       return Text(
-        _literalSearchPreview(hit.content),
+        _literalSearchPreview(snackBlocksAsText(hit.content)),
         key: ValueKey('search-message-body-${hit.eventId}'),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,

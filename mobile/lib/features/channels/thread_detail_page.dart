@@ -1,6 +1,8 @@
 import 'message_author_visibility.dart';
 import 'package:buzz/shared/widgets/adaptive_conversation_pane.dart';
 import 'message_swipe_reply.dart';
+import '../../shared/snack_blocks/snack_block.dart';
+import '../../shared/snack_blocks/snack_choice_scope.dart';
 import '../../shared/widgets/ios_scroll_to_top.dart';
 import 'message_footer_layout.dart';
 import 'reply_summary_link.dart';
@@ -953,6 +955,30 @@ class ThreadDetailPage extends HookConsumerWidget {
     }, [settledImeBottomInset.value]);
 
     final channel = ref.watch(channelByIdProvider(channelId));
+    // An answer to a choices card is a reply in this thread to its author.
+    Future<void> answerChoice({
+      required String option,
+      required String authorPubkey,
+      String? rootId,
+    }) => sendMessage.call(
+      channelId: channelId,
+      content: option,
+      mentionPubkeys: [authorPubkey],
+      channel: channel,
+      parentEventId: threadHead.id,
+      rootEventId: effectiveRootId,
+    );
+    // Stable, so rows below the scope aren't rebuilt by every page build.
+    final latestAnswerChoice = useRef(answerChoice)..value = answerChoice;
+    final stableAnswerChoice = useCallback(
+      ({
+        required String option,
+        required String authorPubkey,
+        String? rootId,
+      }) =>
+          latestAnswerChoice.value(option: option, authorPubkey: authorPubkey),
+      const [],
+    );
     final channelNamesMap = ref.watch(channelIdsByNameProvider);
 
     return FrostedScaffold(
@@ -1005,76 +1031,80 @@ class ThreadDetailPage extends HookConsumerWidget {
                     }
                     return false;
                   },
-                  child: _ThreadMessageList(
-                    dateScrollActivity: dateScrollActivity,
-                    headHeight: headHeight.value ?? 0,
-                    onHeadHeightChanged: (height) {
-                      if (context.mounted) headHeight.value = height;
-                    },
-                    viewport: listViewport,
-                    onUserScrollStart: () {
-                      hidesLatestForInitialTailSettle.value = false;
-                      hidesLatestForComposerTailCorrection.value = false;
-                      initialTailSettle.abandon();
-                      initialViewportReady.value = true;
-                      tailCorrectionInProgress.value = false;
-                      isNavigatingToThreadTail.value = false;
-                      tailIntent.beginDrag();
-                      userOptedOutOfTailFollow.value = true;
-                      userDragDetachedTailFollow.value = true;
-                      followsThreadTail.value = false;
-                    },
-                    onUserScrollEnd: () {
-                      tailIntent.endDrag();
-                      tailIntent.schedule(
-                        allowed: userOptedOutOfTailFollow.value,
-                        revalidate: () =>
-                            context.mounted &&
-                            itemScrollController.isAttached &&
-                            !tailIntent.isDragging &&
-                            userOptedOutOfTailFollow.value,
-                        action: () {
-                          _resumeThreadTailFollow(
-                            isVisible: threadTailIsVisible,
-                            userOptedOut: userOptedOutOfTailFollow,
-                            followsTail: followsThreadTail,
-                          );
-                          if (!userOptedOutOfTailFollow.value) {
-                            userDragDetachedTailFollow.value = false;
-                          }
-                        },
-                      );
-                    },
-                    visible: threadViewportVisible,
-                    itemScrollController: itemScrollController,
-                    itemPositionsListener: itemPositionsListener,
-                    bottomInset: timelineBottomInset,
-                    replies: replies,
-                    knownAgents: threadTyping.isEmpty
-                        ? const {}
-                        : ref.watch(meAgentInventoryProvider).value ?? const {},
-                    inlineTyping: isMember && !isArchived
-                        ? threadTyping
-                        : const [],
-                    relayReplyState: relayReplyState,
-                    onRetryReplies: () =>
-                        ref.invalidate(threadRepliesProvider(repliesArgs)),
-                    localSendAnimations: localSendAnimations,
-                    trackActiveScrollPosition: trackActiveScrollPosition,
-                    headIsDeleted: liveDeletionHidesHead,
-                    head: liveHead,
-                    stickyDayTimestamp: stickyDayTimestamp,
-                    channelNames: channelNamesMap,
-                    channelId: channelId,
-                    currentPubkey: currentPubkey,
-                    highlightedMessageId: highlightedMessageId.value,
-                    allMessages: allMsgs,
-                    isMember: isMember,
-                    isArchived: isArchived,
-                    composerFocusNode: composerFocusNode,
-                    restoreComposerFocus: () =>
-                        restoreComposerFocus.value?.call(),
-                    childrenByParent: childrenByParent,
+                  child: SnackChoiceScope(
+                    send: isMember && !isArchived ? stableAnswerChoice : null,
+                    child: _ThreadMessageList(
+                      dateScrollActivity: dateScrollActivity,
+                      headHeight: headHeight.value ?? 0,
+                      onHeadHeightChanged: (height) {
+                        if (context.mounted) headHeight.value = height;
+                      },
+                      viewport: listViewport,
+                      onUserScrollStart: () {
+                        hidesLatestForInitialTailSettle.value = false;
+                        hidesLatestForComposerTailCorrection.value = false;
+                        initialTailSettle.abandon();
+                        initialViewportReady.value = true;
+                        tailCorrectionInProgress.value = false;
+                        isNavigatingToThreadTail.value = false;
+                        tailIntent.beginDrag();
+                        userOptedOutOfTailFollow.value = true;
+                        userDragDetachedTailFollow.value = true;
+                        followsThreadTail.value = false;
+                      },
+                      onUserScrollEnd: () {
+                        tailIntent.endDrag();
+                        tailIntent.schedule(
+                          allowed: userOptedOutOfTailFollow.value,
+                          revalidate: () =>
+                              context.mounted &&
+                              itemScrollController.isAttached &&
+                              !tailIntent.isDragging &&
+                              userOptedOutOfTailFollow.value,
+                          action: () {
+                            _resumeThreadTailFollow(
+                              isVisible: threadTailIsVisible,
+                              userOptedOut: userOptedOutOfTailFollow,
+                              followsTail: followsThreadTail,
+                            );
+                            if (!userOptedOutOfTailFollow.value) {
+                              userDragDetachedTailFollow.value = false;
+                            }
+                          },
+                        );
+                      },
+                      visible: threadViewportVisible,
+                      itemScrollController: itemScrollController,
+                      itemPositionsListener: itemPositionsListener,
+                      bottomInset: timelineBottomInset,
+                      replies: replies,
+                      knownAgents: threadTyping.isEmpty
+                          ? const {}
+                          : ref.watch(meAgentInventoryProvider).value ??
+                                const {},
+                      inlineTyping: isMember && !isArchived
+                          ? threadTyping
+                          : const [],
+                      relayReplyState: relayReplyState,
+                      onRetryReplies: () =>
+                          ref.invalidate(threadRepliesProvider(repliesArgs)),
+                      localSendAnimations: localSendAnimations,
+                      trackActiveScrollPosition: trackActiveScrollPosition,
+                      headIsDeleted: liveDeletionHidesHead,
+                      head: liveHead,
+                      stickyDayTimestamp: stickyDayTimestamp,
+                      channelNames: channelNamesMap,
+                      channelId: channelId,
+                      currentPubkey: currentPubkey,
+                      highlightedMessageId: highlightedMessageId.value,
+                      allMessages: allMsgs,
+                      isMember: isMember,
+                      isArchived: isArchived,
+                      composerFocusNode: composerFocusNode,
+                      restoreComposerFocus: () =>
+                          restoreComposerFocus.value?.call(),
+                      childrenByParent: childrenByParent,
+                    ),
                   ),
                 ),
               ),

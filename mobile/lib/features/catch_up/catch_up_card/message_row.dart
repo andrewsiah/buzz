@@ -112,7 +112,11 @@ class _MessageRow extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: Grid.quarter),
-                  Text(message.content, style: context.textTheme.bodyLarge),
+                  for (final segment in splitSnackBlocks(message.content))
+                    if (segment.language case final language?)
+                      SnackBlock(language: language, code: segment.text)
+                    else
+                      Text(segment.text, style: context.textTheme.bodyLarge),
                   if (onOpenThread != null)
                     TextButton(
                       style: TextButton.styleFrom(
