@@ -37,7 +37,7 @@ class _MeChatDraft extends HookConsumerWidget {
     // confirms the owner signed for it.
     final bestieUnlisted =
         bestie != null &&
-        directory.hasValue &&
+        !directory.isLoading &&
         !choices.any((agent) => agent.pubkey == bestie);
     final bestieOwnership = bestieUnlisted
         ? ref.watch(meAssistantOwnershipProvider(bestie))
