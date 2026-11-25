@@ -2732,6 +2732,95 @@ void main() {
       );
     });
 
+    final otherRoot = 'ab' * 32;
+    // SNACK: Catch-up's synced channel mark reads every message up to it, so
+    // it waits until this device holds all of the channel's unread messages.
+    test('unread evidence is complete only once a catch-up covered every '
+        'unread message', () async {
+      final session = _FakeRelaySession(
+        memberships: [_membership(_channelA, myPk)],
+        metadata: [_meta(id: _channelA, name: 'general')],
+        recentMessages: [message('older', 30, mention: true)],
+      )..pauseNextUnreadCatchUpQuery();
+      final container = _buildContainer(session: session);
+      addTearDown(container.dispose);
+      final notifier = container.read(channelsProvider.notifier);
+      await container.read(channelsProvider.future);
+      await session.nextUnreadCatchUpQueryStarted;
+      // A live mention lands before the catch-up brings the older message.
+      session.emit(message('newer', 60, mention: true));
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isFalse);
+      session.resumePausedUnreadCatchUpQuery();
+      await _settle();
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isTrue);
+
+      // A reply in a thread this device neither wrote in nor follows is not
+      // counted here, but another device may count it.
+      session.emit(
+        NostrEvent(
+          id: 'reply',
+          pubkey: 'alice',
+          createdAt: 70,
+          kind: EventKind.streamMessageV2,
+          tags: [
+            ['h', _channelA],
+            ['e', otherRoot, '', 'root'],
+            ['e', otherRoot, '', 'reply'],
+          ],
+          content: 'hi',
+          sig: 'sig',
+        ),
+      );
+      expect(
+        notifier.observedUnreadEventsByChannel[_channelA]!.keys,
+        unorderedEquals(['older', 'newer']),
+      );
+      expect(notifier.uncountedReplies(_channelA).map((r) => r.id), ['reply']);
+
+      // A connection that dropped missed live events, which are not replayed:
+      // incomplete until the catch-up after it reconnects.
+      session.setStatus(SessionStatus.disconnected);
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isFalse);
+      session.setStatus(SessionStatus.connected);
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isFalse);
+      await _settle();
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isTrue);
+
+      // A live subscription the relay dropped may have missed messages, even
+      // after RelaySession reopens it.
+      session.setSubscriptionStatus(
+        _channelA,
+        RelaySubscriptionStatus.retrying,
+      );
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isFalse);
+      session.setSubscriptionStatus(_channelA, RelaySubscriptionStatus.ready);
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isFalse);
+
+      // A full window (here mostly quiet agent messages, which the registry
+      // never keeps) can leave out older unread messages.
+      final full = _FakeRelaySession(
+        memberships: [_membership(_channelA, myPk)],
+        metadata: [_meta(id: _channelA, name: 'general')],
+        recentMessages: [
+          for (var i = 0; i < 999; i++) message('q$i', 100 + i, quiet: true),
+          message('mention', 1200, mention: true),
+        ],
+      );
+      final fullContainer = _buildContainer(session: full);
+      addTearDown(fullContainer.dispose);
+      final fullNotifier = fullContainer.read(channelsProvider.notifier);
+      await fullContainer.read(channelsProvider.future);
+      await _waitUntil(() => full.queryBatches.any(isUnread));
+      await _settle();
+      expect(
+        fullNotifier.observedUnreadEventsByChannel[_channelA]!.length,
+        lessThan(10),
+      );
+      expect(fullNotifier.unreadEvidenceComplete(_channelA, null), isFalse);
+      // Read through the window's oldest message, nothing can be missing.
+      expect(fullNotifier.unreadEvidenceComplete(_channelA, 100), isTrue);
+    });
+
     test(
       'a repeated catch-up starts before the last one by the relay drift',
       () async {
@@ -2823,6 +2912,8 @@ void main() {
       await _waitUntil(() => session.queryBatches.any(isUnread));
       await _settle();
       expect(notifier.observedUnreadEventsByChannel[_channelA], isNull);
+      // SNACK: a read that answers for the whole channel waits meanwhile.
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isFalse);
 
       session
         ..messageBatchError = null
@@ -2833,6 +2924,7 @@ void main() {
         () => session.queryBatches.where(isUnread).length > before,
       );
       await _settle();
+      expect(notifier.unreadEvidenceComplete(_channelA, null), isTrue);
       expect(
         [
           for (final filter in session.queryBatches.lastWhere(isUnread))
@@ -3865,6 +3957,8 @@ class _FakeRelaySession extends RelaySessionNotifier {
     (NostrFilter, void Function(NostrEvent), void Function(String message)?)
   >
   _subscriptions = {};
+  final _statusListeners =
+      <NostrFilter, void Function(RelaySubscriptionStatus)>{};
   int _nextSubscriptionKey = 0;
   Completer<void>? _pausedSubscribe;
   Completer<void>? _subscribeStarted;
@@ -4310,7 +4404,21 @@ class _FakeRelaySession extends RelaySessionNotifier {
     void Function(String message)? onClosed,
     required void Function(RelaySubscriptionStatus) onStatusChanged,
     bool resumeSince = true,
-  }) => subscribe(filter, onEvent, onClosed: onClosed);
+  }) {
+    _statusListeners[filter] = onStatusChanged;
+    return subscribe(filter, onEvent, onClosed: onClosed);
+  }
+
+  /// Reports [status] for the live subscription covering [channelId], as
+  /// RelaySession does while it reopens a REQ the relay closed.
+  void setSubscriptionStatus(String channelId, RelaySubscriptionStatus status) {
+    final filter = _subscriptions.values
+        .singleWhere(
+          (entry) => entry.$1.tags['#h']?.contains(channelId) ?? false,
+        )
+        .$1;
+    _statusListeners[filter]!(status);
+  }
 
   @override
   Future<void Function()> subscribe(

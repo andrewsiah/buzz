@@ -342,6 +342,52 @@ class SnackAccount {
     return SnackMe.fromJson(_decode(response));
   }
 
+  /// The agents Snack Cloud lists for this account (the ones Snack runs and
+  /// the ones connected), as pubkey to name. Discovery only: callers verify
+  /// ownership on the relay before offering one. Empty when signed out; a
+  /// list that fails to load is skipped.
+  Future<Map<String, String>> ownedAgents() async {
+    if (!await hasSession) return const {};
+    Future<Object?> read(String path) async {
+      try {
+        // Discovery must never sign the person out: a 401 here skips the list.
+        return _decode(
+          await _send(
+            'GET',
+            path,
+            authenticated: true,
+            keepSessionOn401: true,
+            timeout: const Duration(seconds: 6),
+          ),
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final agents = <String, String>{};
+    final replies = await Future.wait([
+      read('/api/agents/hosted'),
+      read('/api/agents'),
+    ]);
+    for (final json in replies) {
+      final list = json is Map ? json['agents'] : null;
+      if (list is! List) continue;
+      for (final entry in list.take(500)) {
+        if (entry is! Map) continue;
+        final pubkey = entry['pubkey'];
+        final name = entry['name'];
+        if (pubkey is String &&
+            RegExp(r'^[0-9a-f]{64}$').hasMatch(pubkey) &&
+            name is String &&
+            name.trim().isNotEmpty) {
+          agents.putIfAbsent(pubkey, () => name.trim());
+        }
+      }
+    }
+    return agents;
+  }
+
   /// [target] on Snack's web app, wrapped in a one-time sign-in link so the
   /// in-app browser opens it already signed in as this account. Returns
   /// [target] unchanged when it isn't on this account server's origin, when
@@ -514,6 +560,8 @@ class SnackAccount {
     Map<String, Object?>? body,
     bool authenticated = false,
     bool allowRedirect = false,
+    bool keepSessionOn401 = false,
+    Duration timeout = _timeout,
   }) async {
     final request = http.Request(method, _url(path, query))
       ..followRedirects = false;
@@ -530,8 +578,8 @@ class SnackAccount {
     final http.Response response;
     try {
       response = await http.Response.fromStream(
-        await client.send(request).timeout(_timeout),
-      ).timeout(_timeout);
+        await client.send(request).timeout(timeout),
+      ).timeout(timeout);
     } catch (_) {
       throw const SnackAccountException(
         'Couldn’t reach Snack. Check your connection and try again.',
@@ -543,7 +591,9 @@ class SnackAccount {
     if (status >= 200 && status < 300) return response;
     if (allowRedirect && status >= 300 && status < 400) return response;
     if (status == 401) {
-      if (authenticated) await _storage.delete(key: _sessionKey);
+      if (authenticated && !keepSessionOn401) {
+        await _storage.delete(key: _sessionKey);
+      }
       throw const SnackSignedOut();
     }
     final error = _errorText(response);

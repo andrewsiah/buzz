@@ -302,6 +302,61 @@ void main() {
     });
   });
 
+  test(
+    'owned agents merge Snack-run and connected lists, keeping valid rows',
+    () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'snack_session_v1': 'u1.99.sig',
+      });
+      final kiss = 'e9' * 32;
+      final helper = 'ab' * 32;
+      final paths = <String>[];
+      final account = SnackAccount(
+        origin: Uri.parse('https://snack.example.org'),
+        client: () => MockClient((request) async {
+          paths.add(request.url.path);
+          expect(request.headers['Cookie'], 'snack_session=u1.99.sig');
+          if (request.url.path == '/api/agents/hosted') {
+            return http.Response('{"error":"down"}', 500);
+          }
+          return http.Response(
+            jsonEncode({
+              'agents': [
+                {'pubkey': kiss, 'name': ' Kiss ', 'community': 'https://r'},
+                {'pubkey': helper, 'name': 'Helper'},
+                {'pubkey': 'not-a-key', 'name': 'Bad'},
+                {'pubkey': 'cd' * 32, 'name': ''},
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+      expect(await account.ownedAgents(), {kiss: 'Kiss', helper: 'Helper'});
+      expect(paths.toSet(), {'/api/agents/hosted', '/api/agents'});
+    },
+  );
+
+  test('a 401 from an agent list never signs the person out', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'snack_session_v1': 'u1.99.sig',
+    });
+    final account = SnackAccount(
+      origin: Uri.parse('https://snack.example.org'),
+      client: () => MockClient((_) async => http.Response('{}', 401)),
+    );
+    expect(await account.ownedAgents(), isEmpty);
+    expect(await account.hasSession, isTrue);
+  });
+
+  test('owned agents are empty and ask nothing when signed out', () async {
+    final account = SnackAccount(
+      origin: Uri.parse('https://snack.example.org'),
+      client: () => MockClient((_) async => fail('no request expected')),
+    );
+    expect(await account.ownedAgents(), isEmpty);
+  });
+
   test('new accounts are named by their Snack name, else their email', () {
     expect(snackAccountDisplayName(' Ada ', 'ada@example.org'), 'Ada');
     expect(snackAccountDisplayName('', 'ada.l@example.org'), 'ada.l');

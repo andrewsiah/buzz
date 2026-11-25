@@ -83,15 +83,30 @@ class MobileCatchUpReader implements CatchUpReader {
     required Map<String, CatchUpEvidence> Function() evidence,
     required ReadStateState Function() readState,
     required CatchUpReadWrites writes,
+    required bool Function(String channelId) evidenceComplete,
+    Iterable<ObservedUnreadEvent> Function(String channelId)? uncountedReplies,
+    Future<void> Function()? evidenceSettled,
     this.delay = catchUpReadDelay,
   }) : _evidenceOf = evidence,
        _readState = readState,
-       _writes = writes;
+       _writes = writes,
+       _evidenceComplete = evidenceComplete,
+       _uncountedReplies = uncountedReplies,
+       _evidenceSettled = evidenceSettled;
 
   final Map<String, CatchUpEvidence> Function() _evidenceOf;
   final ReadStateState Function() _readState;
   final CatchUpReadWrites _writes;
+  final bool Function(String channelId) _evidenceComplete;
+  final Iterable<ObservedUnreadEvent> Function(String channelId)?
+  _uncountedReplies;
+  final Future<void> Function()? _evidenceSettled;
   final Duration delay;
+
+  /// Channels whose synced mark waits for complete evidence.
+  final _syncWaiting = <String>{};
+  bool _syncWaitScheduled = false;
+  bool _disposed = false;
 
   /// Writes waiting per card key, in order.
   final _pending = <String, _Pending>{};
@@ -130,6 +145,95 @@ class MobileCatchUpReader implements CatchUpReader {
     for (final write in pending.writes) {
       write();
     }
+    _syncChannelRead(parseCardKey(key).channelId);
+  }
+
+  /// SNACK: a mention (or a DM message) is read by its own `msg:` mark, which
+  /// never syncs, so the web or a reinstall showed it unread again. Save the
+  /// channel's synced mark through the newest message read by its own mark
+  /// that is older than every message still unread here: it reads nothing
+  /// unread. A channel mark reads every message up to it, also ones this
+  /// device has not seen, so it waits until this device holds all of the
+  /// channel's unread messages ([_evidenceComplete]). A hand mark anywhere in
+  /// the channel, or a web manual-unread override carried here, skips it.
+  /// Reading a thread card does it too, so a mention newer than an unread
+  /// reply syncs once that reply is read.
+  void _syncChannelRead(String channelId, {bool wait = true}) {
+    if (_disposed) return;
+    final evidence = _evidence(channelId);
+    if (evidence == null || evidence.handMarked) {
+      _syncWaiting.remove(channelId);
+      return;
+    }
+    final readState = _readState();
+    if (overrideActiveFor(readState.contexts, channelId)) {
+      _syncWaiting.remove(channelId);
+      return;
+    }
+    final readAt = readState.effectiveTimestamp(channelId);
+    // Replies this device does not count but another may hold it back too,
+    // while read state leaves them unread.
+    final oldestUnread = <int>[
+      ?evidence.unreadEvents.firstOrNull?.createdAt,
+      for (final reply
+          in _uncountedReplies?.call(channelId) ??
+              const <ObservedUnreadEvent>[])
+        if ((observedUnreadEventReadAt(
+                  reply,
+                  channelId,
+                  readState.effectiveTimestamp,
+                ) ??
+                -1) <
+            reply.createdAt)
+          reply.createdAt,
+    ].fold<int?>(null, (oldest, at) => min(oldest ?? at, at));
+    final through = evidence.ownMarkReadThrough(before: oldestUnread);
+    if (through == null || through <= (readAt ?? -1)) {
+      _syncWaiting.remove(channelId);
+      return;
+    }
+    if (!_evidenceComplete(channelId)) {
+      _syncWaiting.add(channelId);
+      if (wait) _waitForEvidence();
+      return;
+    }
+    _syncWaiting.remove(channelId);
+    _writes.markContextRead(channelId, through);
+  }
+
+  /// Retries every channel whose synced mark waits for complete evidence.
+  /// Evidence that changes calls this; it never waits again by itself, so a
+  /// channel that stays incomplete simply keeps waiting for a change.
+  void retryWaitingSyncs() {
+    for (final channelId in [..._syncWaiting]) {
+      if (!_syncWaiting.contains(channelId)) continue;
+      // A card still waiting syncs when it is written.
+      if (_pending.keys.any(
+        (key) => parseCardKey(key).channelId == channelId,
+      )) {
+        continue;
+      }
+      _syncChannelRead(channelId, wait: false);
+    }
+  }
+
+  /// Retries once when the current catch-up settles (at most one wait at a
+  /// time, started only by a card's write).
+  void _waitForEvidence() {
+    final settled = _evidenceSettled;
+    if (settled == null || _syncWaitScheduled) return;
+    _syncWaitScheduled = true;
+    unawaited(
+      settled().then(
+        (_) {
+          _syncWaitScheduled = false;
+          retryWaitingSyncs();
+        },
+        onError: (Object _) {
+          _syncWaitScheduled = false;
+        },
+      ),
+    );
   }
 
   /// Drops [key]'s waiting writes; returns whether any were waiting.
@@ -148,6 +252,8 @@ class MobileCatchUpReader implements CatchUpReader {
 
   /// Drops every waiting read without writing it.
   void dispose() {
+    _disposed = true;
+    _syncWaiting.clear();
     for (final pending in _pending.values) {
       pending.timer.cancel();
     }
@@ -321,7 +427,19 @@ final catchUpReaderProvider = Provider<CatchUpReader>((ref) {
     evidence: () => ref.read(catchUpEvidenceProvider),
     readState: () => ref.read(readStateProvider),
     writes: _AppReadWrites(ref),
+    evidenceComplete: (channelId) => ref
+        .read(channelsProvider.notifier)
+        .unreadEvidenceComplete(
+          channelId,
+          ref.read(readStateProvider).effectiveTimestamp(channelId),
+        ),
+    uncountedReplies: (channelId) =>
+        ref.read(channelsProvider.notifier).uncountedReplies(channelId),
+    evidenceSettled: () =>
+        ref.read(channelsProvider.notifier).waitForUnreadCatchUp(),
   );
+  // Evidence that changed may now be complete for a waiting synced mark.
+  ref.listen(catchUpEvidenceProvider, (_, _) => reader.retryWaitingSyncs());
   // Write what is waiting before the app may be suspended or killed.
   ref.listen(appLifecycleProvider, (_, next) {
     if (next != AppLifecycleState.resumed) reader.flush();

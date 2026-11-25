@@ -76,6 +76,18 @@ String overrideFrontierKey(String contextId) =>
     ? 'esc:$contextId'
     : contextId;
 
+/// SNACK: whether [contexts] hold a web manual-unread override on raw context
+/// [contextId] that is still active: set more often than cleared, and the
+/// context's frontier not past its baseline (web `overrideActive`). A
+/// frontier written past the baseline would quietly end it.
+bool overrideActiveFor(Map<String, int> contexts, String contextId) {
+  final set = contexts['ov_s:$contextId'] ?? 0;
+  final clear = contexts['ov_c:$contextId'] ?? 0;
+  final baseline = contexts['ov_b:$contextId'] ?? 0;
+  final frontier = contexts[overrideFrontierKey(contextId)] ?? 0;
+  return set > 0 && set > clear && frontier <= baseline;
+}
+
 /// Whether [keys] form a legal override group for [target]: exactly
 /// `ov_s:`, `ov_c:` and `ov_b:`, or `ov_c:` alone as a tombstone.
 bool _isOverrideShape(String target, Iterable<String> keys) {
