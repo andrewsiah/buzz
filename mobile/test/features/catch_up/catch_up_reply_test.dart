@@ -3,7 +3,6 @@
 // card; X throws a recording away; an empty transcript sends nothing; a
 // failed send keeps the draft and the card.
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:buzz/features/catch_up/catch_up_page.dart';
 import 'package:buzz/features/catch_up/catch_up_queue.dart';
