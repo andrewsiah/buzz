@@ -25,6 +25,10 @@ import '../channels/send_message_provider.dart';
 /// 16 kHz mono 16-bit is ~43 kB/s once encoded, so a minute fits.
 const catchUpDictationMaxDuration = Duration(seconds: 60);
 
+/// The most WAV sent for one reply (base64 then stays under Snack Cloud's
+/// 3 MB body), in case a device records above 16 kHz.
+const catchUpDictationMaxBytes = 2200000;
+
 /// Sends [content] to [channelId], inside the thread [rootId] when given.
 typedef CatchUpReplySender =
     Future<void> Function({
@@ -282,8 +286,15 @@ class CatchUpReplyBar extends HookConsumerWidget {
       const [],
     );
 
+    // Read up front: a reply already on its way still lands, and still says
+    // when it didn't, after its card has left the stack.
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final sendReply = ref.read(catchUpReplySenderProvider);
+    final transcribe = ref.read(catchUpTranscriberProvider);
+    final makeDictation = ref.read(catchUpDictationFactoryProvider);
+
     // The newest outcome replaces an older toast rather than queueing.
-    void toast(String message) => ScaffoldMessenger.maybeOf(context)
+    void toast(String message) => messenger
       ?..hideCurrentSnackBar()
       ..showFeedbackSnackBar(
         SnackBar(content: Text(message)),
@@ -297,7 +308,7 @@ class CatchUpReplyBar extends HookConsumerWidget {
     Future<bool> deliver(String content) async {
       setMode(_Mode.sending);
       try {
-        await ref.read(catchUpReplySenderProvider)(
+        await sendReply(
           channelId: channel.id,
           channel: channel,
           rootId: rootId,
@@ -305,7 +316,7 @@ class CatchUpReplyBar extends HookConsumerWidget {
         );
       } catch (error) {
         setMode(_Mode.idle);
-        if (mounted.value) toast(_notSent(error));
+        toast(_notSent(error));
         return false;
       }
       setMode(_Mode.idle);
@@ -327,20 +338,22 @@ class CatchUpReplyBar extends HookConsumerWidget {
       String text;
       try {
         final wav = await current.stop();
-        text = (await ref.read(catchUpTranscriberProvider)(
-          channel.id,
-          wav,
-        )).trim();
+        if (wav.length > catchUpDictationMaxBytes) {
+          throw const SnackAccountException(
+            'That was too long. Keep a spoken reply under a minute.',
+          );
+        }
+        text = (await transcribe(channel.id, wav)).trim();
       } catch (error) {
         await release();
         setMode(_Mode.idle);
-        if (mounted.value) toast(_transcribeFailed(error));
+        toast(_transcribeFailed(error));
         return;
       }
       await release();
       if (text.isEmpty) {
         setMode(_Mode.idle);
-        if (mounted.value) toast("Didn't catch that");
+        toast("Didn't catch that");
         return;
       }
       await deliver(text);
@@ -349,22 +362,22 @@ class CatchUpReplyBar extends HookConsumerWidget {
     Future<void> startRecording() async {
       if (mode.value != _Mode.idle) return;
       FocusScope.of(context).unfocus();
-      final current = ref.read(catchUpDictationFactoryProvider)();
+      final current = makeDictation();
       dictation.value = current;
       levels.value = const [];
       setMode(_Mode.recording);
       try {
         await current.start();
       } catch (error) {
+        // Discarded meanwhile: X already put things back.
+        if (!identical(dictation.value, current)) return;
         await release();
         setMode(_Mode.idle);
-        if (mounted.value) {
-          toast(
-            error is CatchUpMicDenied
-                ? 'Allow microphone access in Settings to talk a reply.'
-                : "Couldn't start the microphone.",
-          );
-        }
+        toast(
+          error is CatchUpMicDenied
+              ? 'Allow microphone access in Settings to talk a reply.'
+              : "Couldn't start the microphone.",
+        );
         return;
       }
       if (!identical(dictation.value, current)) return; // discarded meanwhile
@@ -381,15 +394,24 @@ class CatchUpReplyBar extends HookConsumerWidget {
 
     Future<void> discard() async {
       final current = dictation.value;
-      if (current == null) return;
+      if (current == null || mode.value != _Mode.recording) return;
       limit.value?.cancel();
       try {
         await current.cancel();
       } catch (_) {}
       await release();
-      levels.value = const [];
+      if (mounted.value) levels.value = const [];
       setMode(_Mode.idle);
     }
+
+    // Leaving the app while recording throws the recording away, so a
+    // pocketed phone never sends what it overheard.
+    useOnAppLifecycleStateChange((_, state) {
+      if (state != AppLifecycleState.resumed &&
+          state != AppLifecycleState.inactive) {
+        unawaited(discard());
+      }
+    });
 
     final busy =
         mode.value == _Mode.transcribing || mode.value == _Mode.sending;
@@ -431,10 +453,13 @@ class CatchUpReplyBar extends HookConsumerWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(width: Grid.xxs),
-            Text(
-              mode.value == _Mode.transcribing ? 'Transcribing…' : 'Sending…',
-              style: context.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                mode.value == _Mode.transcribing ? 'Transcribing…' : 'Sending…',
+                style: context.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
             ),
           ],

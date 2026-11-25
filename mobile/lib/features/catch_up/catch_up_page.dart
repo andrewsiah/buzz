@@ -227,8 +227,6 @@ class CatchUpPage extends HookConsumerWidget {
       openConversation(context, channel, messageId, threadRootId);
     }
 
-    // Typing a reply: the card gets the room the buttons below it take.
-    final typing = View.of(context).viewInsets.bottom > 0;
     final Widget body;
     if (current != null) {
       final (:channelId, :rootId) = parseCardKey(current);
@@ -273,56 +271,52 @@ class CatchUpPage extends HookConsumerWidget {
               ),
             ),
           ),
-          if (typing)
-            const SizedBox(height: Grid.xxs)
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Grid.xs,
-                Grid.xxs,
-                Grid.xs,
-                Grid.half,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                      ),
-                      onPressed: () => act(CatchUpAction.keep),
-                      child: const Text('Keep unread'),
-                    ),
-                  ),
-                  const SizedBox(width: Grid.twelve),
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                      ),
-                      onPressed: () => act(CatchUpAction.read),
-                      child: const Text('Mark as read'),
-                    ),
-                  ),
-                ],
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Grid.xs,
+              Grid.xxs,
+              Grid.xs,
+              Grid.half,
             ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                Grid.xs,
-                0,
-                Grid.xs,
-                MediaQuery.paddingOf(context).bottom + Grid.xxs,
-              ),
-              child: Text(
-                'Swipe right to mark read, left to keep unread.',
-                textAlign: TextAlign.center,
-                style: context.textTheme.bodySmall?.copyWith(
-                  color: context.colors.onSurfaceVariant,
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    onPressed: () => act(CatchUpAction.keep),
+                    child: const Text('Keep unread'),
+                  ),
                 ),
+                const SizedBox(width: Grid.twelve),
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    onPressed: () => act(CatchUpAction.read),
+                    child: const Text('Mark as read'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              Grid.xs,
+              0,
+              Grid.xs,
+              MediaQuery.paddingOf(context).bottom + Grid.xxs,
+            ),
+            child: Text(
+              'Swipe right to mark read, left to keep unread.',
+              textAlign: TextAlign.center,
+              style: context.textTheme.bodySmall?.copyWith(
+                color: context.colors.onSurfaceVariant,
               ),
             ),
-          ],
+          ),
         ],
       );
     } else if (loadingQueue) {
@@ -349,36 +343,63 @@ class CatchUpPage extends HookConsumerWidget {
     }
 
     final title = current != null ? '${deck.length} Left' : 'Catch up';
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-            act(CatchUpAction.read),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-            act(CatchUpAction.keep),
-        const SingleActivator(LogicalKeyboardKey.keyZ): undo,
-        const SingleActivator(LogicalKeyboardKey.keyU): undo,
-        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): undo,
+    return Shortcuts(
+      shortcuts: {
+        const SingleActivator(LogicalKeyboardKey.arrowRight): _KeyIntent(
+          () => act(CatchUpAction.read),
+        ),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): _KeyIntent(
+          () => act(CatchUpAction.keep),
+        ),
+        const SingleActivator(LogicalKeyboardKey.keyZ): _KeyIntent(undo),
+        const SingleActivator(LogicalKeyboardKey.keyU): _KeyIntent(undo),
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _KeyIntent(
+          undo,
+        ),
       },
-      child: Focus(
-        autofocus: true,
-        child: Scaffold(
-          backgroundColor: context.colors.surface,
-          body: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Header(
-                  title: title,
-                  onUndo: state.steps.isEmpty ? null : undo,
-                ),
-                Expanded(child: body),
-              ],
+      child: Actions(
+        actions: {_KeyIntent: _KeyAction()},
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            backgroundColor: context.colors.surface,
+            body: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Header(
+                    title: title,
+                    onUndo: state.steps.isEmpty ? null : undo,
+                  ),
+                  Expanded(child: body),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// A Catch-up key: never while typing a reply, so the keys reach the text.
+class _KeyIntent extends Intent {
+  const _KeyIntent(this.run);
+  final VoidCallback run;
+}
+
+class _KeyAction extends Action<_KeyIntent> {
+  @override
+  bool isEnabled(_KeyIntent intent) =>
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<EditableText>() ==
+      null;
+
+  @override
+  Object? invoke(_KeyIntent intent) {
+    intent.run();
+    return null;
   }
 }
 

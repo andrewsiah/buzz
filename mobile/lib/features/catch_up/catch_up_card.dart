@@ -268,8 +268,6 @@ class CatchUpCard extends HookConsumerWidget {
         replyChannel == null || replied == null || replyChannel.isSolo
         ? null
         : CatchUpReplyBar(
-            // A new target starts an empty box.
-            key: ValueKey('catch-up-reply-$thread'),
             channel: replyChannel,
             rootId: thread,
             hintText: thread != null

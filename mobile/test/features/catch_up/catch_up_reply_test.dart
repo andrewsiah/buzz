@@ -13,6 +13,7 @@ import 'package:buzz/features/catch_up/catch_up_sources.dart';
 import 'package:buzz/features/catch_up/catch_up_state.dart';
 import 'package:buzz/shared/relay/relay.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/widget_helpers.dart';
@@ -58,6 +59,7 @@ void main() {
     Object? sendError;
     final dictations = <FakeDictation>[];
     var transcript = '';
+    Completer<void>? gate;
     final heard = <(String, int)>[];
     await tester.pumpWidget(
       WidgetHelpers.testable(
@@ -101,6 +103,7 @@ void main() {
           }),
           catchUpTranscriberProvider.overrideWithValue((channelId, wav) async {
             heard.add((channelId, wav.length));
+            await gate?.future;
             return transcript;
           }),
         ],
@@ -141,6 +144,13 @@ void main() {
     expect(find.text('New replies in a thread'), findsOneWidget);
     expect(find.text('see you at 3'), findsNothing);
 
+    // A hardware key typed into the reply is text, not Catch-up's Undo.
+    await tester.tap(field);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.pump();
+    expect(find.text('1 Left'), findsOneWidget);
+
     // Mic, then X: the recording is thrown away and nothing is sent.
     await tester.tap(mic);
     await tester.pump();
@@ -166,13 +176,21 @@ void main() {
     expect(sent, hasLength(1));
     expect(find.text('1 Left'), findsOneWidget);
 
-    // Spoken: the transcript goes straight into the thread, no edit step.
+    // Spoken: the transcript goes straight into the thread, no edit step,
+    // even when the card was marked read while it was being transcribed.
     transcript = 'on it';
+    gate = Completer();
     await tester.tap(mic);
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('catch-up-reply-mic-send')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Transcribing…'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Mark as read'));
+    await tester.pump();
+    expect(find.text("You're all caught up"), findsOneWidget);
+    gate.complete();
+    await tester.pump();
+    await tester.pump();
     expect(sent.last, (channelId: 'launch', rootId: 'root1', content: 'on it'));
     expect(reader.calls['readThread'], ['launch', 'root1']);
     expect(find.text("You're all caught up"), findsOneWidget);
