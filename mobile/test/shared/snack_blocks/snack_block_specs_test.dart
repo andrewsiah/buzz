@@ -2,6 +2,7 @@ import 'package:buzz/features/channels/message_content/preview_text.dart';
 import 'package:buzz/shared/snack_blocks/snack_block_specs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'snack_progress_failed_sample.dart';
 import 'snack_progress_sample.dart';
 
 void main() {
@@ -137,5 +138,16 @@ void main() {
       maxLines: 3,
     ).whereType<PreviewText>().map((piece) => piece.text).join();
     expect(open, 'hi\nProgress');
+  });
+
+  test('a long failed card draws as a card, not raw JSON', () {
+    final segments = splitSnackBlocks(snackProgressFailedMessage);
+    expect(segments.map((s) => s.language), [null, 'snack-progress']);
+    expect(segments.first.text, "Couldn't finish this.");
+    final progress = SnackProgress.parse(segments.last.text)!;
+    expect(progress.title, 'End-to-end test for job watchdog');
+    expect(progress.count, 63);
+    expect(progress.label(progress.updatedAt), "Couldn't finish");
+    expect(snackBlocksAsText(snackProgressFailedMessage), isNot(contains('{')));
   });
 }
