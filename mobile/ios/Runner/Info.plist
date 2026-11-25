@@ -66,7 +66,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Buzz uses the camera to take profile photos and animated avatars, attach photos to messages, and scan QR codes for device pairing.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Buzz needs microphone access so you can speak in Huddles and record voice notes.</string>
+	<string>Snack uses the microphone for huddles, voice notes and spoken replies.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Buzz uses your photo library to select profile photos and images to attach to messages.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

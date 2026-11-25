@@ -422,6 +422,23 @@ class SnackAccount {
     }
   }
 
+  /// Speech to text for a short 16 kHz mono [wav], through Snack Cloud as
+  /// the signed-in person. Empty when nothing was heard. A 401 here never
+  /// signs the person out of the app.
+  Future<String> transcribe(String channelId, Uint8List wav) async {
+    final response = await _send(
+      'POST',
+      '/api/office/${Uri.encodeComponent(channelId)}/transcribe',
+      body: {'audio': base64Encode(wav)},
+      authenticated: true,
+      keepSessionOn401: true,
+      timeout: const Duration(seconds: 45),
+    );
+    final body = _decode(response);
+    final text = body is Map ? body['text'] : null;
+    return text is String ? text.trim() : '';
+  }
+
   static bool _sameOrigin(Uri a, Uri b) =>
       a.scheme.toLowerCase() == b.scheme.toLowerCase() &&
       a.host.toLowerCase() == b.host.toLowerCase() &&

@@ -187,11 +187,16 @@ class CatchUpPage extends HookConsumerWidget {
       }
     }
 
-    void act(CatchUpAction action) {
-      final key = current;
-      if (key == null) return;
+    void decideCard(String key, CatchUpAction action) {
+      // Already decided (a swipe while the reply was sending): nothing to do.
+      if (state.steps.any((step) => step.key == key)) return;
       final latest = (byId[key] ?? state.seen[key])?.latest ?? 0;
       unawaited(decide(key, action, latest));
+    }
+
+    void act(CatchUpAction action) {
+      final key = current;
+      if (key != null) decideCard(key, action);
     }
 
     void undo() {
@@ -222,6 +227,8 @@ class CatchUpPage extends HookConsumerWidget {
       openConversation(context, channel, messageId, threadRootId);
     }
 
+    // Typing a reply: the card gets the room the buttons below it take.
+    final typing = View.of(context).viewInsets.bottom > 0;
     final Widget body;
     if (current != null) {
       final (:channelId, :rootId) = parseCardKey(current);
@@ -258,58 +265,64 @@ class CatchUpPage extends HookConsumerWidget {
                       viewer: viewer,
                       onOpen: open,
                       onDecide: act,
+                      // A reply handles the card, like Mark as read.
+                      onReplied: () => decideCard(current, CatchUpAction.read),
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Grid.xs,
-              Grid.xxs,
-              Grid.xs,
-              Grid.half,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
+          if (typing)
+            const SizedBox(height: Grid.xxs)
+          else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Grid.xs,
+                Grid.xxs,
+                Grid.xs,
+                Grid.half,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      onPressed: () => act(CatchUpAction.keep),
+                      child: const Text('Keep unread'),
                     ),
-                    onPressed: () => act(CatchUpAction.keep),
-                    child: const Text('Keep unread'),
                   ),
-                ),
-                const SizedBox(width: Grid.twelve),
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
+                  const SizedBox(width: Grid.twelve),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      onPressed: () => act(CatchUpAction.read),
+                      child: const Text('Mark as read'),
                     ),
-                    onPressed: () => act(CatchUpAction.read),
-                    child: const Text('Mark as read'),
                   ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              Grid.xs,
-              0,
-              Grid.xs,
-              MediaQuery.paddingOf(context).bottom + Grid.xxs,
-            ),
-            child: Text(
-              'Swipe right to mark read, left to keep unread.',
-              textAlign: TextAlign.center,
-              style: context.textTheme.bodySmall?.copyWith(
-                color: context.colors.onSurfaceVariant,
+                ],
               ),
             ),
-          ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                Grid.xs,
+                0,
+                Grid.xs,
+                MediaQuery.paddingOf(context).bottom + Grid.xxs,
+              ),
+              child: Text(
+                'Swipe right to mark read, left to keep unread.',
+                textAlign: TextAlign.center,
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: context.colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ],
       );
     } else if (loadingQueue) {
