@@ -47,7 +47,7 @@ Future<void> _openMobileHuddle({
             context: context,
             title: 'Invite your agent?',
             message:
-                'Your Codex agent is not invited to this Huddle. Invite it to hear this call? Keep Buzz open on the desktop running this agent.',
+                'Your Codex agent is not invited to this Huddle. Invite it to hear this call? Keep Snack open on the desktop running this agent.',
             confirmLabel: 'Invite and join',
           );
           if (!confirmed || !context.mounted) return;
@@ -146,7 +146,7 @@ class _HuddleAgentConnectionNotice extends ConsumerWidget {
         children: [
           Text(
             expired
-                ? 'Your agent has not connected. Open Buzz on its desktop and check that the agent is running, then start a new Huddle.'
+                ? 'Your agent has not connected. Open Snack on its desktop and check that the agent is running, then start a new Huddle.'
                 : 'Connecting to your agent…',
             textAlign: TextAlign.center,
           ),

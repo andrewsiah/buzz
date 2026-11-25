@@ -85,7 +85,7 @@ final class ShareSuggestions {
       content: nil,
       speakableGroupName: INSpeakableString(spokenPhrase: displayName),
       conversationIdentifier: conversationIdentifier,
-      serviceName: "Buzz",
+      serviceName: "Snack",
       sender: nil,
       attachments: nil
     )

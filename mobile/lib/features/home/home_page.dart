@@ -443,7 +443,7 @@ class HomePage extends HookConsumerWidget {
                           width: 80,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                           colorBlendMode: BlendMode.srcIn,
-                          semanticLabel: 'Buzz',
+                          semanticLabel: 'Snack',
                         ),
                   list: wide && strip != null
                       ? Builder(

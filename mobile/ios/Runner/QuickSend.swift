@@ -67,11 +67,11 @@ final class QuickSendBridge {
     sending = true
     defer { sending = false }
     guard await waitUntilReady(deadline) else {
-      throw QuickSendError("Open Buzz, then try again.")
+      throw QuickSendError("Open Snack, then try again.")
     }
     let bestie = try await call("bestie") as? [String: Any]
     guard let pubkey = bestie?["pubkey"] as? String, let scope = bestie?["scope"] as? String else {
-      throw QuickSendError("Buzz couldn't find your Bestie.")
+      throw QuickSendError("Snack couldn't find your Bestie.")
     }
     try await confirm(bestie?["name"] as? String)
     let start = ContinuousClock.now
@@ -86,15 +86,15 @@ final class QuickSendBridge {
 
   @MainActor
   private func call(_ method: String, arguments: Any? = nil) async throws -> Any? {
-    guard ready, let channel else { throw QuickSendError("Open Buzz, then try again.") }
+    guard ready, let channel else { throw QuickSendError("Open Snack, then try again.") }
     let reply: Any? = await withCheckedContinuation { continuation in
       channel.invokeMethod(method, arguments: arguments) { continuation.resume(returning: $0) }
     }
     if let error = reply as? FlutterError {
-      throw QuickSendError(error.message ?? "Buzz couldn't send that.")
+      throw QuickSendError(error.message ?? "Snack couldn't send that.")
     }
     if reply as? NSObject === FlutterMethodNotImplemented {
-      throw QuickSendError("Buzz isn't ready to send yet.")
+      throw QuickSendError("Snack isn't ready to send yet.")
     }
     return reply
   }
@@ -109,7 +109,7 @@ struct QuickSendError: Error, CustomLocalizedStringResourceConvertible {
 @available(iOS 16.0, *)
 struct MessageBestieIntent: AppIntent {
   static var title: LocalizedStringResource = "Message my Bestie"
-  static var description = IntentDescription("Sends a message in your DM with your Bestie without opening Buzz.")
+  static var description = IntentDescription("Sends a message in your DM with your Bestie without opening Snack.")
   static var openAppWhenRun = false
 
   @Parameter(title: "Message", requestValueDialog: "What do you want to say?")

@@ -395,6 +395,53 @@ class SnackAccount {
     );
   }
 
+  /// Permanently deletes the Snack account on the server (its details, key
+  /// and sign-in records), then forgets the session here. Messages already
+  /// posted stay in their communities.
+  Future<void> deleteAccount() async {
+    await _send(
+      'POST',
+      '/api/account/delete',
+      body: {'confirm': 'delete'},
+      authenticated: true,
+    );
+    await _storage.delete(key: _sessionKey);
+    await _storage.delete(key: _pubkeyKey);
+  }
+
+  /// Sends a report about a message or person to Snack for a person to
+  /// review (`POST /api/reports`).
+  Future<void> report({
+    required String kind,
+    required String community,
+    required String author,
+    required String reason,
+    String? eventId,
+    String? content,
+    String? note,
+    bool blocked = false,
+  }) async {
+    String clip(String value, int max) =>
+        value.length <= max ? value : value.substring(0, max);
+    await _send(
+      'POST',
+      '/api/reports',
+      body: {
+        'kind': kind,
+        'community': community,
+        'author': author.toLowerCase(),
+        'reason': reason,
+        if (eventId != null) 'eventId': eventId,
+        if (content != null && content.isNotEmpty)
+          'content': clip(content, 2000),
+        if (note != null && note.trim().isNotEmpty)
+          'note': clip(note.trim(), 1000),
+        'blocked': blocked,
+      },
+      authenticated: true,
+    );
+  }
+
   /// Forgets the session here, then ends it on the server in the background
   /// (best effort: an unreachable server's copy simply expires).
   Future<void> signOut() async {

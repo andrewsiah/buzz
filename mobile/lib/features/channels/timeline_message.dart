@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../shared/relay/relay.dart';
 import '../../shared/custom_emoji/custom_emoji.dart';
 import '../../shared/mentions/mention_tags.dart';
+import '../../shared/moderation/moderation.dart';
 import 'channel_event_order.dart';
 import 'channel_window.dart';
 import 'message_media.dart';
@@ -347,7 +348,9 @@ VoidCallback? debugOnFormatTimeline;
 List<TimelineMessage> formatTimeline(
   List<NostrEvent> events, {
   String? currentPubkey,
+  ModerationState? moderationState,
 }) {
+  final moderation = moderationState ?? currentModeration;
   assert(() {
     debugOnFormatTimeline?.call();
     return true;
@@ -497,6 +500,8 @@ List<TimelineMessage> formatTimeline(
     if (event.kind == EventKind.streamMessage ||
         event.kind == EventKind.streamMessageV2 ||
         event.kind == EventKind.streamMessageDiff) {
+      // Blocked people's messages and reported messages stay hidden here.
+      if (moderation.hides(event.id, event.pubkey)) continue;
       final edit = edits[event.id];
       final effectiveTags = edit?.tags ?? event.tags;
       // Include both notify (`p`) and reference-only (`mention`) tags —

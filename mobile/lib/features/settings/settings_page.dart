@@ -20,6 +20,8 @@ import '../../shared/identity_transfer/nsec_export_sheet.dart';
 import '../../shared/clipboard_utils.dart';
 import '../../shared/hosted/hosted_environment.dart';
 import '../../shared/hosted/sign_out.dart';
+import '../../shared/moderation/safety_actions.dart';
+import '../../shared/snack/snack_account.dart' show snackOrigin;
 import '../../shared/push/push_relay_capability_provider.dart';
 import '../../shared/push/push_bootstrap.dart';
 import '../../shared/relay/relay.dart';
@@ -245,6 +247,35 @@ class SettingsPage extends HookConsumerWidget {
                   ],
                   if (!wide && HostedEnvironment.enabled)
                     const _BuilderlabAccountSection(),
+                  AppListCard(
+                    verticalPadding: Grid.twelve,
+                    children: [
+                      AppListRow(
+                        key: const Key('settings-blocked-people'),
+                        icon: BuzzIcons.userMinus,
+                        title: 'Blocked people',
+                        trailing: const _RowChevron(),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => detail(
+                              'Blocked people',
+                              const BlockedPeopleList(),
+                            ),
+                          ),
+                        ),
+                      ),
+                      AppListRow(
+                        key: const Key('settings-support'),
+                        icon: BuzzIcons.circleAlert,
+                        title: 'Help & support',
+                        trailing: const _RowChevron(),
+                        onTap: () => launchUrl(
+                          snackOrigin.replace(path: '/support'),
+                          mode: LaunchMode.inAppBrowserView,
+                        ),
+                      ),
+                    ],
+                  ),
                   // Rarely needed, so it sits last.
                   AppListCard(
                     verticalPadding: Grid.twelve,
@@ -258,6 +289,15 @@ class SettingsPage extends HookConsumerWidget {
                           title: 'Sign out',
                           titleColor: context.colors.error,
                           onTap: () => confirmSignOut(rowContext, ref),
+                        ),
+                      ),
+                      Builder(
+                        builder: (rowContext) => AppListRow(
+                          key: const Key('settings-delete-account'),
+                          icon: BuzzIcons.trash2,
+                          title: 'Delete account',
+                          titleColor: context.colors.error,
+                          onTap: () => confirmDeleteAccount(rowContext, ref),
                         ),
                       ),
                     ],

@@ -15,6 +15,9 @@ import '../../shared/animated_avatar.dart';
 import '../../shared/widgets/buzz_toast.dart';
 import '../../shared/identity_names/identity_names.dart';
 import '../../shared/identity_names/identity_names_provider.dart';
+import '../../shared/moderation/moderation.dart';
+import '../../shared/moderation/safety_actions.dart';
+import '../../shared/widgets/app_list.dart';
 import '../../shared/relay/relay.dart';
 import '../../shared/theme/theme.dart';
 import '../../shared/utils/string_utils.dart';
@@ -496,6 +499,8 @@ class UserProfileSheet extends HookConsumerWidget {
                       ),
                       if (agentSettings != null)
                         Builder(builder: agentSettings!),
+                      if (pk != currentPubkey)
+                        _ProfileSafetyActions(pubkey: pk, name: displayName),
                     ] else ...[
                       Row(
                         children: [
@@ -532,6 +537,8 @@ class UserProfileSheet extends HookConsumerWidget {
                       SizedBox(height: contextualActionsSpacing),
                       if (contextualActions != null)
                         Builder(builder: contextualActions!),
+                      if (pk != currentPubkey)
+                        _ProfileSafetyActions(pubkey: pk, name: displayName),
                     ],
                   ],
                 ),
@@ -690,6 +697,56 @@ class _AvatarFallback extends StatelessWidget {
           color: context.colors.onPrimaryContainer,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+}
+
+/// Report and Block for someone else's profile (App Store Guideline 1.2).
+class _ProfileSafetyActions extends ConsumerWidget {
+  const _ProfileSafetyActions({required this.pubkey, required this.name});
+
+  final String pubkey;
+  final String name;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final blocked = ref.watch(
+      moderationProvider.select((state) => state.isBlocked(pubkey)),
+    );
+    final error = context.colors.error;
+    return Padding(
+      padding: const EdgeInsets.only(top: Grid.xs),
+      child: AppListCard(
+        horizontalPadding: 0,
+        children: [
+          AppListRow(
+            key: const Key('profile-report'),
+            icon: BuzzIcons.flag,
+            title: 'Report',
+            titleColor: error,
+            onTap: () => showReportSheet(
+              context: context,
+              ref: ref,
+              authorPubkey: pubkey,
+              authorName: name,
+            ),
+          ),
+          AppListRow(
+            key: const Key('profile-block'),
+            icon: BuzzIcons.userMinus,
+            title: blocked ? 'Unblock' : 'Block',
+            titleColor: blocked ? null : error,
+            onTap: () => blocked
+                ? ref.read(moderationProvider.notifier).unblock(pubkey)
+                : confirmBlock(
+                    context: context,
+                    ref: ref,
+                    pubkey: pubkey,
+                    name: name,
+                  ),
+          ),
+        ],
       ),
     );
   }
