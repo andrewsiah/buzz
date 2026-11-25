@@ -1,55 +1,52 @@
 import 'dart:async' show Timer, unawaited;
-import 'dart:math' show cos, min, pi, sin;
+import 'dart:math' show pi, sin;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../theme/theme.dart';
-import 'flapping_bee.dart';
+import 'cookie_loading_mark.dart';
 
-/// Replaces the standard pull-to-refresh spinner with Buzz's loading bee.
+/// Replaces the standard pull-to-refresh spinner with the loading cookie.
 ///
 /// Flutter continues to own the gesture, refresh lifecycle, and accessibility
 /// semantics. This widget maps those states into the elastic pull, retained
-/// loading gap, and bee animation.
-class BeeRefreshIndicator extends HookConsumerWidget {
+/// loading gap, and cookie animation: a whole cookie while pulling, eaten bite
+/// by bite while refreshing.
+class CookieRefreshIndicator extends HookConsumerWidget {
   /// Called when the user completes a pull, to load fresh data.
   ///
-  /// The bee keeps flapping until this future settles, so it should complete
+  /// The cookie keeps being eaten until this future settles, so it should complete
   /// only once the refresh is done.
   final Future<void> Function() onRefresh;
 
   /// The scrollable this indicator wraps.
   ///
   /// It must scroll vertically; the indicator reads its scroll notifications
-  /// to couple the bee to the user's finger.
+  /// to couple the cookie to the user's finger.
   final Widget child;
 
   /// The vertical offset of the scrollable's top edge, such as a pinned header.
   final double edgeOffset;
 
-  const BeeRefreshIndicator({
+  const CookieRefreshIndicator({
     required this.onRefresh,
     required this.child,
     this.edgeOffset = 0,
     super.key,
   });
 
-  static const _beeWidth = 60.0;
-  static const _beeHeight = _beeWidth * 309 / 466;
+  // About the old 60x40 mark's area, with room inside the 72px gap.
+  static const _cookieSize = 48.0;
   static const _triggerDistance = 100.0;
   static const _loadingGap = 72.0;
-  static const _beeVerticalAlignment = 0.75;
-  static const _beeInitialScale = 0.6;
-  static const _beeRevealStartProgress = 0.18;
-  static const _pupilStartBeyondArmDistance = 96.0;
-  static const _pupilFullBeforeEmojiDistance = 8.0;
+  static const _cookieVerticalAlignment = 0.75;
+  static const _cookieInitialScale = 0.6;
+  static const _cookieRevealStartProgress = 0.18;
   static const _eyeEmojiSwapViewportFraction = 0.26;
   static const _eyeEmojiMinSwapBeyondArmDistance = 220.0;
   static const _eyeEmojiMaxSwapBeyondArmDistance = 280.0;
-  static const _pupilMinBeyondArmDuration = Duration(milliseconds: 300);
   static const _eyeEmojiMinBeyondArmDuration = Duration(milliseconds: 700);
   static const _eyeShakePeriod = Duration(milliseconds: 140);
   static const _settleDuration = Duration(milliseconds: 180);
@@ -74,15 +71,11 @@ class BeeRefreshIndicator extends HookConsumerWidget {
       duration: _settleDuration,
       reverseDuration: _settleDuration,
     );
-    final flapController = useAnimationController(
-      duration: const Duration(milliseconds: 480),
-    );
     final eyeShakeController = useAnimationController(
       duration: _eyeShakePeriod,
     );
     final completionProgress = useAnimation(completionController);
     final gapProgress = useAnimation(gapController);
-    final flapProgress = useAnimation(flapController);
     final eyeShakeProgress = useAnimation(eyeShakeController);
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
     useEffect(
@@ -134,7 +127,6 @@ class BeeRefreshIndicator extends HookConsumerWidget {
       if (nextStatus == RefreshIndicatorStatus.drag) {
         completionController.reset();
         gapController.reset();
-        flapController.stop();
         if (!didTriggerArmHaptic.value) {
           pullBeyondArmDistance.value = 0;
           pullBeyondArmDuration.value = Duration.zero;
@@ -155,7 +147,6 @@ class BeeRefreshIndicator extends HookConsumerWidget {
         } else {
           gapController.animateTo(1, curve: Curves.easeOutCubic);
         }
-        if (!reducedMotion) flapController.repeat();
       } else if (nextStatus == RefreshIndicatorStatus.done) {
         stopEyeShake();
         if (reducedMotion) {
@@ -166,7 +157,6 @@ class BeeRefreshIndicator extends HookConsumerWidget {
           pullBeyondArmDuration.value = Duration.zero;
           status.value = null;
         } else {
-          flapController.repeat();
           gapController
               .animateTo(1, curve: Curves.easeOutCubic)
               .whenCompleteOrCancel(() {
@@ -174,7 +164,6 @@ class BeeRefreshIndicator extends HookConsumerWidget {
                 gapController.animateBack(0, curve: Curves.easeInOutCubic);
                 completionController.forward(from: 0).whenCompleteOrCancel(() {
                   if (!completionController.isCompleted) return;
-                  flapController.stop();
                   pullProgress.value = 0;
                   pullDistance.value = 0;
                   pullBeyondArmDistance.value = 0;
@@ -192,7 +181,6 @@ class BeeRefreshIndicator extends HookConsumerWidget {
         pullBeyondArmDuration.value = Duration.zero;
         armedAt.value = null;
         if (!gapController.isAnimating) gapController.reset();
-        flapController.stop();
       }
     }
 
@@ -202,7 +190,7 @@ class BeeRefreshIndicator extends HookConsumerWidget {
       if (notification is! ScrollStartNotification &&
           notification.metrics.extentBefore == 0) {
         // BouncingScrollPhysics reports a live negative scroll position while
-        // the user is pulling. Reading it keeps the bee coupled to the finger.
+        // the user is pulling. Reading it keeps the cookie coupled to the finger.
         final elasticPull =
             (notification.metrics.minScrollExtent - notification.metrics.pixels)
                 .clamp(0.0, double.infinity)
@@ -282,42 +270,20 @@ class BeeRefreshIndicator extends HookConsumerWidget {
       _ => false,
     };
     final dragRevealProgress =
-        ((pullProgress.value - _beeRevealStartProgress) /
-                (1 - _beeRevealStartProgress))
+        ((pullProgress.value - _cookieRevealStartProgress) /
+                (1 - _cookieRevealStartProgress))
             .clamp(0.0, 1.0);
     final isVisible =
         status.value != null &&
         (isLoading || dragRevealProgress > 0 || completionProgress > 0);
     final retainedGap = _loadingGap * gapProgress;
     final visibleGap = pullDistance.value + retainedGap;
-    final top = edgeOffset + (visibleGap - _beeHeight) * _beeVerticalAlignment;
+    final top =
+        edgeOffset + (visibleGap - _cookieSize) * _cookieVerticalAlignment;
     final opacity = isLoading ? 1 - completionProgress : dragRevealProgress;
-    final beeScale = isLoading
+    final cookieScale = isLoading
         ? 1.0
-        : _beeInitialScale + (1 - _beeInitialScale) * dragRevealProgress;
-    final flapAmount = reducedMotion
-        ? 0.0
-        : isLoading
-        ? 0.5 - (0.5 * cos(flapProgress * 4 * pi))
-        : pullProgress.value * 0.18;
-    final pupilFullDistance =
-        eyeEmojiSwapDistance - _pupilFullBeforeEmojiDistance;
-    final pupilDistanceProgress =
-        ((pullBeyondArmDistance.value - _pupilStartBeyondArmDistance) /
-                (pupilFullDistance - _pupilStartBeyondArmDistance))
-            .clamp(0.0, 1.0);
-    final pupilGrowthDuration =
-        _eyeEmojiMinBeyondArmDuration - _pupilMinBeyondArmDuration;
-    final pupilProgress =
-        pullBeyondArmDuration.value >= _pupilMinBeyondArmDuration
-        ? min(
-            pupilDistanceProgress,
-            ((pullBeyondArmDuration.value - _pupilMinBeyondArmDuration)
-                        .inMicroseconds /
-                    pupilGrowthDuration.inMicroseconds)
-                .clamp(0.0, 1.0),
-          ).toDouble()
-        : 0.0;
+        : _cookieInitialScale + (1 - _cookieInitialScale) * dragRevealProgress;
     final showEyeEmoji = !isLoading && didTriggerEmojiHaptic.value;
     final eyeShakeOffset = showEyeEmoji && !reducedMotion
         ? sin(eyeShakeProgress * 2 * pi) * 0.75
@@ -347,7 +313,7 @@ class BeeRefreshIndicator extends HookConsumerWidget {
               child: ScrollConfiguration(
                 behavior: scrollBehavior,
                 child: Transform.translate(
-                  key: const ValueKey('bee-refresh-retained-gap'),
+                  key: const ValueKey('cookie-refresh-retained-gap'),
                   offset: Offset(0, retainedGap),
                   child: child,
                 ),
@@ -368,50 +334,40 @@ class BeeRefreshIndicator extends HookConsumerWidget {
                   offset: Offset(0, top - edgeOffset),
                   child: IgnorePointer(
                     child: Opacity(
-                      key: const ValueKey('bee-refresh-opacity'),
+                      key: const ValueKey('cookie-refresh-opacity'),
                       opacity: opacity.clamp(0.0, 1.0),
                       child: Transform.scale(
-                        key: const ValueKey('bee-refresh-scale'),
-                        scale: beeScale,
+                        key: const ValueKey('cookie-refresh-scale'),
+                        scale: cookieScale,
                         child: SizedBox(
-                          width: _beeWidth,
-                          height: _beeHeight,
+                          width: _cookieSize,
+                          height: _cookieSize,
                           child: Stack(
                             clipBehavior: Clip.none,
                             alignment: Alignment.topCenter,
                             children: [
-                              Positioned.fill(
-                                child: FlappingBee(
-                                  width: _beeWidth,
-                                  color: context.colors.primary,
-                                  flapAmount: flapAmount,
-                                  eyeProgress: showEyeEmoji
-                                      ? 1
-                                      : !isLoading && pupilProgress > 0
-                                      ? pupilProgress
-                                      : null,
-                                ),
+                              CookieLoadingMark(
+                                size: _cookieSize,
+                                progress: isLoading ? null : 0,
+                                semanticLabel: null,
                               ),
                               if (showEyeEmoji)
-                                Positioned(
-                                  top: 2,
-                                  left: 0,
-                                  right: 0,
+                                Positioned.fill(
                                   child: ExcludeSemantics(
                                     child: Transform.translate(
                                       key: const ValueKey(
-                                        'bee-refresh-eyes-emoji-offset',
+                                        'cookie-refresh-eyes-emoji-offset',
                                       ),
-                                      offset: const Offset(2, 0),
+                                      offset: const Offset(0, 12),
                                       child: Transform.translate(
                                         key: const ValueKey(
-                                          'bee-refresh-eyes-emoji-shake',
+                                          'cookie-refresh-eyes-emoji-shake',
                                         ),
                                         offset: Offset(eyeShakeOffset, 0),
                                         child: const Text(
                                           '👀',
                                           key: ValueKey(
-                                            'bee-refresh-eyes-emoji',
+                                            'cookie-refresh-eyes-emoji',
                                           ),
                                           textAlign: TextAlign.center,
                                           style: TextStyle(

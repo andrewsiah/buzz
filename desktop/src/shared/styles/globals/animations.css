@@ -930,3 +930,234 @@
     animation: none;
   }
 }
+
+/* Snack loading cookie (see CookieLoadingMark.tsx): eaten bite by bite on a
+   2 s loop. Four stacked frames (0-3 bites) swap by opacity at 20/40/60%,
+   each bite drops crumbs, and at 80% the cookie shrinks away over a falling
+   crumb pile before returning whole. Only opacity and transform animate on
+   HTML-level elements, so the loop stays on the compositor. */
+.cookie-loader {
+  aspect-ratio: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.cookie-loader__cookie,
+.cookie-loader__frame {
+  inset: 0;
+  position: absolute;
+}
+
+.cookie-loader__frame {
+  display: block;
+  height: 100%;
+  opacity: 0;
+  width: 100%;
+}
+
+.cookie-loader__frame--0 {
+  opacity: 1;
+}
+
+.cookie-loader__crumb {
+  border-radius: 15%;
+  opacity: 0;
+  position: absolute;
+}
+
+.cookie-loader__crumb--1,
+.cookie-loader__crumb--2,
+.cookie-loader__crumb--3 {
+  background: #b87634;
+}
+
+.cookie-loader__crumb--pile {
+  background: #d99a4e;
+}
+
+.cookie-loader__cookie,
+.cookie-loader__frame,
+.cookie-loader__crumb {
+  animation-duration: 2s;
+  animation-fill-mode: both;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+.cookie-loader__cookie {
+  animation-name: cookie-loader-eat;
+  will-change: transform, opacity;
+}
+
+.cookie-loader__frame--0 {
+  animation-name: cookie-loader-frame-0;
+}
+
+.cookie-loader__frame--1 {
+  animation-name: cookie-loader-frame-1;
+}
+
+.cookie-loader__frame--2 {
+  animation-name: cookie-loader-frame-2;
+}
+
+.cookie-loader__frame--3 {
+  animation-name: cookie-loader-frame-3;
+}
+
+.cookie-loader__crumb--1 {
+  animation-name: cookie-loader-crumb-1;
+}
+
+.cookie-loader__crumb--2 {
+  animation-name: cookie-loader-crumb-2;
+}
+
+.cookie-loader__crumb--3 {
+  animation-name: cookie-loader-crumb-3;
+}
+
+.cookie-loader__crumb--pile {
+  animation-name: cookie-loader-crumb-pile;
+}
+
+@keyframes cookie-loader-eat {
+  0%,
+  80% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  88%,
+  96% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cookie-loader-frame-0 {
+  0%,
+  19.9% {
+    opacity: 1;
+  }
+  20%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cookie-loader-frame-1 {
+  0%,
+  19.9%,
+  40%,
+  100% {
+    opacity: 0;
+  }
+  20%,
+  39.9% {
+    opacity: 1;
+  }
+}
+
+@keyframes cookie-loader-frame-2 {
+  0%,
+  39.9%,
+  60%,
+  100% {
+    opacity: 0;
+  }
+  40%,
+  59.9% {
+    opacity: 1;
+  }
+}
+
+@keyframes cookie-loader-frame-3 {
+  0%,
+  59.9% {
+    opacity: 0;
+  }
+  60%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes cookie-loader-crumb-1 {
+  0%,
+  19.9% {
+    opacity: 0;
+    transform: none;
+  }
+  20% {
+    opacity: 1;
+    transform: none;
+  }
+  36%,
+  100% {
+    opacity: 0;
+    transform: translateY(var(--cookie-crumb-fall));
+  }
+}
+
+@keyframes cookie-loader-crumb-2 {
+  0%,
+  39.9% {
+    opacity: 0;
+    transform: none;
+  }
+  40% {
+    opacity: 1;
+    transform: none;
+  }
+  56%,
+  100% {
+    opacity: 0;
+    transform: translateY(var(--cookie-crumb-fall));
+  }
+}
+
+@keyframes cookie-loader-crumb-3 {
+  0%,
+  59.9% {
+    opacity: 0;
+    transform: none;
+  }
+  60% {
+    opacity: 1;
+    transform: none;
+  }
+  76%,
+  100% {
+    opacity: 0;
+    transform: translateY(var(--cookie-crumb-fall));
+  }
+}
+
+@keyframes cookie-loader-crumb-pile {
+  0%,
+  79.9% {
+    opacity: 0;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  98%,
+  100% {
+    opacity: 0;
+    transform: translateY(var(--cookie-crumb-fall));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cookie-loader__cookie,
+  .cookie-loader__frame,
+  .cookie-loader__crumb {
+    animation: none;
+  }
+}

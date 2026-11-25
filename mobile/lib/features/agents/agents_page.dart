@@ -9,7 +9,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../shared/agents/owned_agent_directory.dart';
-import '../../shared/widgets/bee_refresh_indicator.dart';
+import '../../shared/widgets/cookie_refresh_indicator.dart';
 import '../../shared/widgets/buzz_toast.dart';
 import '../../shared/agents/remote_agents.dart';
 import '../../shared/deeplink/deep_link.dart';
@@ -698,7 +698,7 @@ class AgentsPage extends HookConsumerWidget {
         top: false,
         child: Material(
           color: Colors.transparent,
-          child: BeeRefreshIndicator(
+          child: CookieRefreshIndicator(
             edgeOffset: topHeight,
             onRefresh: refresh,
             child: CustomScrollView(
