@@ -540,7 +540,7 @@ String _friendlyInviteError(Object error) {
   }
   if (message.contains('invite_invalid')) return 'This invite is not valid.';
   if (message.contains('join_policy_required')) {
-    return 'Review this community’s join requirements in your browser, then return to Buzz.';
+    return 'Review this community’s join requirements in your browser, then return to Snack.';
   }
   final failure = transportFailure(error);
   if (failure == TransportFailure.insecure) {

@@ -1,3 +1,4 @@
+import 'shared/moderation/moderation.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -29,6 +30,7 @@ Future<void> runBuzzApp(Widget app) async {
 
   // Pre-load preferences so the first frame uses the saved theme/accent.
   final prefs = await SharedPreferences.getInstance();
+  loadSavedModeration(prefs);
   await userAgent;
 
   runApp(

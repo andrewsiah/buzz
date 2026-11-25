@@ -69,6 +69,7 @@ import 'sticky_date_header.dart';
 import 'date_header_scroll_activity.dart';
 import 'reading_marks.dart';
 import 'timeline_message.dart';
+import '../../shared/moderation/moderation.dart';
 
 part 'thread_detail_page/nested_thread_summary_row.dart';
 part 'thread_detail_page/message_list.dart';
@@ -160,6 +161,8 @@ class ThreadDetailPage extends HookConsumerWidget {
     final liveChannelEvents =
         ref.watch(channelMessagesProvider(channelId)).value ??
         const <NostrEvent>[];
+    // Rebuild when someone is blocked or a message reported.
+    ref.watch(moderationProvider);
     // Loading/error states can still carry replies from the last query.
     // whenData drops that retained value during retries.
     final replyEvents = repliesState.value;
@@ -193,6 +196,7 @@ class ThreadDetailPage extends HookConsumerWidget {
             // keeps a temporarily unavailable head visible without restoring
             // a head that was deleted while this page was open.
             if (!liveDeletionHidesHead &&
+                !currentModeration.hides(threadHead.id, threadHead.pubkey) &&
                 !fetchedReplies.any((message) => message.id == threadHead.id))
               threadHead,
             ...fetchedReplies,

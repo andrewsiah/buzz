@@ -88,9 +88,9 @@ class HostedConnectSheet extends HookConsumerWidget {
       HostedFlowStage.setupIdentity =>
         flow.requiredIdentityPubkey == null
             ? flow.canCreateIdentity
-                  ? 'Create a new Buzz identity, or import the identity you already use.'
-                  : 'Bring your existing Buzz identity from your other device.'
-            : 'Your identity hasn’t been backed up yet. Bring it from your other device to keep using the same Buzz account.',
+                  ? 'Create a new Snack identity, or import the identity you already use.'
+                  : 'Bring your existing Snack identity from your other device.'
+            : 'Your identity hasn’t been backed up yet. Bring it from your other device to keep using the same Snack account.',
       HostedFlowStage.confirmBackup =>
         flow.bindingOnly
             ? 'Link this identity to the receiving Builderlab account? '
@@ -121,7 +121,7 @@ class HostedConnectSheet extends HookConsumerWidget {
         'Review this community’s terms and privacy policy before joining.',
       HostedFlowStage.signIn => 'Complete sign-in in your browser.',
       HostedFlowStage.browserReturned =>
-        'Continue setup in your browser. Open your community in Buzz when it is ready.',
+        'Continue setup in your browser. Open your community in Snack when it is ready.',
       HostedFlowStage.complete => 'Your community is ready.',
       HostedFlowStage.blocked => hostedFlowProblemMessage(flow.problem),
     };
@@ -149,8 +149,8 @@ class HostedConnectSheet extends HookConsumerWidget {
         Text(
           flow.requiredIdentityPubkey == null
               ? flow.canCreateIdentity
-                    ? 'Create or import a Buzz identity'
-                    : 'Import your Buzz identity'
+                    ? 'Create or import a Snack identity'
+                    : 'Import your Snack identity'
               : 'Bring your identity with you',
           style: context.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w600,
@@ -218,7 +218,7 @@ class HostedConnectSheet extends HookConsumerWidget {
           FilledButton(
             style: actionStyle,
             onPressed: flow.createIdentity,
-            child: const Text('Create my Buzz identity'),
+            child: const Text('Create my Snack identity'),
           ),
           const SizedBox(height: Grid.xxs),
         ],
@@ -329,8 +329,8 @@ class HostedConnectSheet extends HookConsumerWidget {
       HostedFlowStage.setupIdentity =>
         flow.requiredIdentityPubkey == null
             ? flow.canCreateIdentity
-                  ? 'Create or import a Buzz identity'
-                  : 'Import your Buzz identity'
+                  ? 'Create or import a Snack identity'
+                  : 'Import your Snack identity'
             : 'Bring your identity with you',
       HostedFlowStage.confirmBackup =>
         flow.bindingOnly ? 'Link your identity?' : 'Back up your secret key?',

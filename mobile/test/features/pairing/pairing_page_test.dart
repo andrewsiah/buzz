@@ -64,7 +64,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pumpAndSettle();
         expect(tester.element(action), same(originalAction));
-        expect(find.bySemanticsLabel('Buzz'), findsNothing);
+        expect(find.bySemanticsLabel('Snack'), findsNothing);
         expect(
           find.text('Choose an address for your community.'),
           findsOneWidget,
@@ -149,7 +149,7 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          expect(find.bySemanticsLabel('Buzz'), findsNothing);
+          expect(find.bySemanticsLabel('Snack'), findsNothing);
           expect(find.text('Scan a QR code'), findsOneWidget);
           expect(find.text('Enter community link'), findsOneWidget);
           expect(find.text('Create a community'), findsOneWidget);
@@ -224,7 +224,7 @@ void main() {
         WidgetHelpers.testable(child: const PairingPage()),
       );
 
-      expect(find.bySemanticsLabel('Buzz'), findsOneWidget);
+      expect(find.bySemanticsLabel('Snack'), findsOneWidget);
       expect(find.text('Welcome to Buzz'), findsNothing);
       expect(
         find.text(

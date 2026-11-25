@@ -13,6 +13,8 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../shared/clipboard_utils.dart';
+import '../../shared/identity_names/identity_names_provider.dart';
+import '../../shared/moderation/safety_actions.dart';
 import '../../shared/deeplink/deep_link.dart';
 import '../../shared/snack_blocks/snack_block_specs.dart';
 import '../../shared/relay/relay.dart';
@@ -42,6 +44,7 @@ import 'native_photo_zoom_preview.dart';
 import 'unread_badge/is_high_priority_event.dart';
 
 part 'message_actions/quick_reaction_row.dart';
+part 'message_actions/safety_section.dart';
 
 /// Preview length for reminder targets — matches desktop's
 /// `msg.body.slice(0, 100)`.
@@ -188,6 +191,16 @@ Future<void> showMessageActions({
                       ],
                     ),
                   ],
+                  if (!message.isSystem &&
+                      currentPubkey != null &&
+                      message.pubkey.toLowerCase() !=
+                          currentPubkey.toLowerCase())
+                    _MessageSafetySection(
+                      message: message,
+                      sheetContext: sheetContext,
+                      pageContext: context,
+                      pageRef: ref,
+                    ),
                   if (canManageMessage)
                     SheetActionSection(
                       children: [

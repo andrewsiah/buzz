@@ -121,6 +121,7 @@ import 'thread_replies_provider.dart';
 import 'open_channel_routes.dart';
 import 'reading_marks.dart';
 import 'timeline_message.dart';
+import '../../shared/moderation/moderation.dart';
 
 part 'channel_detail_page/message_list.dart';
 part 'channel_detail_page/jump_to_oldest_unread_button.dart';
@@ -658,11 +659,16 @@ class _ResolvedChannelDetailPage extends HookConsumerWidget {
     // changes. Format only when the events themselves change: the notifier
     // publishes a new list for every event change.
     final events = messagesState.value ?? const <NostrEvent>[];
+    final moderation = ref.watch(moderationProvider);
     final timelineMessages = useMemoized(
       () => resolvedChannel.isForum
           ? <TimelineMessage>[]
-          : formatTimeline(events, currentPubkey: currentPubkey),
-      [events, currentPubkey, resolvedChannel.isForum],
+          : formatTimeline(
+              events,
+              currentPubkey: currentPubkey,
+              moderationState: moderation,
+            ),
+      [events, currentPubkey, resolvedChannel.isForum, moderation],
     );
     final timelineEntries = buildMainTimelineEntries(
       // End events still update the original card through allMessages.

@@ -148,7 +148,7 @@ class OnboardingAppEntry extends HookConsumerWidget {
           title: 'Sign out of BuilderLab?',
           message:
               '${email != null && email.isNotEmpty ? 'You’re signed in as $email. ' : ''}'
-              'Your saved Buzz identities will stay on this device.',
+              'Your saved Snack identities will stay on this device.',
           confirmLabel: 'Sign out',
         );
         if (!context.mounted ||
