@@ -21,6 +21,7 @@ import '../channels/small_avatar.dart';
 import '../channels/thread_replies_provider.dart';
 import 'catch_up_messages.dart';
 import 'catch_up_queue.dart';
+import 'catch_up_reply.dart';
 import 'catch_up_sources.dart';
 import 'catch_up_state.dart';
 
@@ -104,6 +105,7 @@ class CatchUpCard extends HookConsumerWidget {
     required this.viewer,
     required this.onOpen,
     required this.onDecide,
+    this.onReplied,
   });
 
   final Channel? channel;
@@ -122,6 +124,11 @@ class CatchUpCard extends HookConsumerWidget {
   final void Function(String channelId, String? messageId, String? threadRootId)
   onOpen;
   final ValueChanged<CatchUpAction> onDecide;
+
+  /// A reply sent from the card's reply box landed: the card is handled.
+  /// Without it, or for a Solo chat (whose agent the conversation picks),
+  /// the card has no reply box.
+  final VoidCallback? onReplied;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -257,6 +264,22 @@ class CatchUpCard extends HookConsumerWidget {
       );
     }
 
+    final replyChannel = channel;
+    final replied = onReplied;
+    final Widget? replyBar =
+        replyChannel == null || replied == null || replyChannel.isSolo
+        ? null
+        : CatchUpReplyBar(
+            channel: replyChannel,
+            rootId: thread,
+            hintText: thread != null
+                ? 'Reply in thread…'
+                : replyChannel.isDm
+                ? 'Message $title'
+                : 'Message #${replyChannel.name}',
+            onSent: replied,
+          );
+
     return Semantics(
       container: true,
       label: '$title: $reason',
@@ -300,6 +323,10 @@ class CatchUpCard extends HookConsumerWidget {
                   header,
                   Divider(height: 1, color: context.colors.outlineVariant),
                   Expanded(child: body),
+                  if (replyBar != null) ...[
+                    Divider(height: 1, color: context.colors.outlineVariant),
+                    replyBar,
+                  ],
                 ],
               ),
               if (strength > 0)

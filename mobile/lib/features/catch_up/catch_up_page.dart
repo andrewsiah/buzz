@@ -187,11 +187,16 @@ class CatchUpPage extends HookConsumerWidget {
       }
     }
 
-    void act(CatchUpAction action) {
-      final key = current;
-      if (key == null) return;
+    void decideCard(String key, CatchUpAction action) {
+      // Already decided (a swipe while the reply was sending): nothing to do.
+      if (state.steps.any((step) => step.key == key)) return;
       final latest = (byId[key] ?? state.seen[key])?.latest ?? 0;
       unawaited(decide(key, action, latest));
+    }
+
+    void act(CatchUpAction action) {
+      final key = current;
+      if (key != null) decideCard(key, action);
     }
 
     void undo() {
@@ -258,6 +263,8 @@ class CatchUpPage extends HookConsumerWidget {
                       viewer: viewer,
                       onOpen: open,
                       onDecide: act,
+                      // A reply handles the card, like Mark as read.
+                      onReplied: () => decideCard(current, CatchUpAction.read),
                     ),
                   ),
                 ],
@@ -336,36 +343,63 @@ class CatchUpPage extends HookConsumerWidget {
     }
 
     final title = current != null ? '${deck.length} Left' : 'Catch up';
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-            act(CatchUpAction.read),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-            act(CatchUpAction.keep),
-        const SingleActivator(LogicalKeyboardKey.keyZ): undo,
-        const SingleActivator(LogicalKeyboardKey.keyU): undo,
-        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): undo,
+    return Shortcuts(
+      shortcuts: {
+        const SingleActivator(LogicalKeyboardKey.arrowRight): _KeyIntent(
+          () => act(CatchUpAction.read),
+        ),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): _KeyIntent(
+          () => act(CatchUpAction.keep),
+        ),
+        const SingleActivator(LogicalKeyboardKey.keyZ): _KeyIntent(undo),
+        const SingleActivator(LogicalKeyboardKey.keyU): _KeyIntent(undo),
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _KeyIntent(
+          undo,
+        ),
       },
-      child: Focus(
-        autofocus: true,
-        child: Scaffold(
-          backgroundColor: context.colors.surface,
-          body: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Header(
-                  title: title,
-                  onUndo: state.steps.isEmpty ? null : undo,
-                ),
-                Expanded(child: body),
-              ],
+      child: Actions(
+        actions: {_KeyIntent: _KeyAction()},
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            backgroundColor: context.colors.surface,
+            body: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Header(
+                    title: title,
+                    onUndo: state.steps.isEmpty ? null : undo,
+                  ),
+                  Expanded(child: body),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// A Catch-up key: never while typing a reply, so the keys reach the text.
+class _KeyIntent extends Intent {
+  const _KeyIntent(this.run);
+  final VoidCallback run;
+}
+
+class _KeyAction extends Action<_KeyIntent> {
+  @override
+  bool isEnabled(_KeyIntent intent) =>
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<EditableText>() ==
+      null;
+
+  @override
+  Object? invoke(_KeyIntent intent) {
+    intent.run();
+    return null;
   }
 }
 

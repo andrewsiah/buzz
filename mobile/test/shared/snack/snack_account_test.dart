@@ -363,4 +363,39 @@ void main() {
     expect(snackAccountDisplayName('', ''), '');
     expect(snackAccountDisplayName('', '@example.org'), '');
   });
+
+  test('transcribes with the session and never signs out on a 401', () async {
+    final origin = Uri.parse('https://snack.example.org');
+    FlutterSecureStorage.setMockInitialValues({
+      'snack_session_v1': 'u1.99.sig',
+    });
+    final requests = <http.Request>[];
+    var reply = http.Response(jsonEncode({'text': '  sounds good  '}), 200);
+    final account = SnackAccount(
+      origin: origin,
+      client: () => MockClient((request) async {
+        requests.add(request);
+        return reply;
+      }),
+    );
+    final wav = Uint8List.fromList([1, 2, 3]);
+    expect(await account.transcribe('c1', wav), 'sounds good');
+    final request = requests.single;
+    expect(request.method, 'POST');
+    expect(request.url.path, '/api/office/c1/transcribe');
+    expect(request.headers['Cookie'], 'snack_session=u1.99.sig');
+    expect(jsonDecode(request.body), {'audio': base64Encode(wav)});
+
+    // Nothing heard is empty text, not an error.
+    reply = http.Response('{}', 200);
+    expect(await account.transcribe('c1', wav), '');
+
+    // A refusal surfaces but keeps the app signed in.
+    reply = http.Response('{"error":"nope"}', 401);
+    await expectLater(
+      account.transcribe('c1', wav),
+      throwsA(isA<SnackSignedOut>()),
+    );
+    expect(await account.hasSession, isTrue);
+  });
 }

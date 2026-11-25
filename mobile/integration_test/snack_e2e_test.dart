@@ -18,7 +18,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-const _dir = '/tmp/snack-e2e';
+// Override with --dart-define=SNACK_E2E_DIR=... to run beside another e2e.
+const _dir = String.fromEnvironment(
+  'SNACK_E2E_DIR',
+  defaultValue: '/tmp/snack-e2e',
+);
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -79,7 +83,11 @@ Future<void> _serve(WidgetTester tester, List<String> errors) async {
     try {
       res = await _run(tester, cmd, errors);
     } catch (e, s) {
-      res = {'ok': false, 'error': '$e', 'stack': '$s'.split('\n').take(6).join('\n')};
+      res = {
+        'ok': false,
+        'error': '$e',
+        'stack': '$s'.split('\n').take(6).join('\n'),
+      };
     }
     debugPrint('E2E_STEP ${cmd['op']} ${cmd['step'] ?? ''} ok=${res['ok']}');
     final tmp = File('$_dir/res.$n.tmp')..writeAsStringSync(jsonEncode(res));
@@ -96,7 +104,9 @@ Finder _finder(Map<String, dynamic> f) {
   } else if (f['keyPrefix'] != null) {
     final p = f['keyPrefix'] as String;
     base = find.byWidgetPredicate(
-      (w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith(p),
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith(p),
     );
   } else if (f['text'] != null) {
     final t = f['text'] as String;
@@ -106,7 +116,9 @@ Finder _finder(Map<String, dynamic> f) {
   } else if (f['tooltip'] != null) {
     base = find.byTooltip(f['tooltip'] as String);
   } else if (f['semantics'] != null) {
-    base = find.bySemanticsLabel(RegExp(RegExp.escape(f['semantics'] as String)));
+    base = find.bySemanticsLabel(
+      RegExp(RegExp.escape(f['semantics'] as String)),
+    );
   } else if (f['type'] != null) {
     final t = f['type'] as String;
     base = find.byWidgetPredicate((w) => w.runtimeType.toString() == t);
@@ -124,7 +136,10 @@ Finder _finder(Map<String, dynamic> f) {
   }
   if (f['ancestor'] != null) {
     // The nearest ancestor of `base` that matches this finder.
-    base = find.ancestor(of: base, matching: _finder(f['ancestor'] as Map<String, dynamic>));
+    base = find.ancestor(
+      of: base,
+      matching: _finder(f['ancestor'] as Map<String, dynamic>),
+    );
   }
   if (f['all'] != true) base = base.hitTestable();
   final i = f['index'];
@@ -133,7 +148,12 @@ Finder _finder(Map<String, dynamic> f) {
   return base;
 }
 
-Future<bool> _waitFor(WidgetTester tester, Finder f, int seconds, {bool gone = false}) async {
+Future<bool> _waitFor(
+  WidgetTester tester,
+  Finder f,
+  int seconds, {
+  bool gone = false,
+}) async {
   final end = DateTime.now().add(Duration(seconds: seconds));
   while (DateTime.now().isBefore(end)) {
     final found = f.evaluate().isNotEmpty;
@@ -158,7 +178,11 @@ List<String> _visibleTexts(WidgetTester tester) {
 
 List<String> _visibleKeys(WidgetTester tester) {
   final out = <String>{};
-  for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String>).hitTestable().evaluate()) {
+  for (final e
+      in find
+          .byWidgetPredicate((w) => w.key is ValueKey<String>)
+          .hitTestable()
+          .evaluate()) {
     out.add((e.widget.key! as ValueKey<String>).value);
   }
   return out.toList();
@@ -207,7 +231,10 @@ Future<Map<String, dynamic>> _run(
     case 'ping':
       return {'ok': true};
     case 'pump':
-      await _pumpFor(tester, Duration(milliseconds: (cmd['ms'] as int?) ?? 1000));
+      await _pumpFor(
+        tester,
+        Duration(milliseconds: (cmd['ms'] as int?) ?? 1000),
+      );
       return {'ok': true};
     case 'wait':
       final f = _finder(cmd['find'] as Map<String, dynamic>);
@@ -221,7 +248,13 @@ Future<Map<String, dynamic>> _run(
       final f = _finder(cmd['find'] as Map<String, dynamic>);
       final texts = <String>[];
       for (final e in f.evaluate()) {
-        for (final r in find.descendant(of: find.byElementPredicate((x) => x == e), matching: find.byType(RichText)).evaluate()) {
+        for (final r
+            in find
+                .descendant(
+                  of: find.byElementPredicate((x) => x == e),
+                  matching: find.byType(RichText),
+                )
+                .evaluate()) {
           texts.add((r.widget as RichText).text.toPlainText());
         }
       }
@@ -229,15 +262,26 @@ Future<Map<String, dynamic>> _run(
     case 'tap':
       final f = _finder(cmd['find'] as Map<String, dynamic>);
       if (!await _waitFor(tester, f, timeout)) {
-        return {'ok': false, 'error': 'not found', 'texts': _visibleTexts(tester)};
+        return {
+          'ok': false,
+          'error': 'not found',
+          'texts': _visibleTexts(tester),
+        };
       }
       await tester.tap(f.first, warnIfMissed: false);
-      await _pumpFor(tester, Duration(milliseconds: (cmd['settle'] as int?) ?? 800));
+      await _pumpFor(
+        tester,
+        Duration(milliseconds: (cmd['settle'] as int?) ?? 800),
+      );
       return {'ok': true};
     case 'longpress':
       final f = _finder(cmd['find'] as Map<String, dynamic>);
       if (!await _waitFor(tester, f, timeout)) {
-        return {'ok': false, 'error': 'not found', 'texts': _visibleTexts(tester)};
+        return {
+          'ok': false,
+          'error': 'not found',
+          'texts': _visibleTexts(tester),
+        };
       }
       await tester.longPress(f.first, warnIfMissed: false);
       await _pumpFor(tester, const Duration(milliseconds: 800));
@@ -245,7 +289,11 @@ Future<Map<String, dynamic>> _run(
     case 'enter':
       final f = _finder(cmd['find'] as Map<String, dynamic>);
       if (!await _waitFor(tester, f, timeout)) {
-        return {'ok': false, 'error': 'not found', 'texts': _visibleTexts(tester)};
+        return {
+          'ok': false,
+          'error': 'not found',
+          'texts': _visibleTexts(tester),
+        };
       }
       await tester.tap(f.first, warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 300));
@@ -262,7 +310,11 @@ Future<Map<String, dynamic>> _run(
       return {'ok': true};
     case 'scroll':
       final f = _finder(cmd['find'] as Map<String, dynamic>);
-      await tester.drag(f.first, Offset(0, ((cmd['dy'] as num?) ?? -300).toDouble()), warnIfMissed: false);
+      await tester.drag(
+        f.first,
+        Offset(0, ((cmd['dy'] as num?) ?? -300).toDouble()),
+        warnIfMissed: false,
+      );
       await _pumpFor(tester, const Duration(milliseconds: 800));
       return {'ok': true};
     case 'back':
@@ -287,7 +339,10 @@ Future<Map<String, dynamic>> _run(
         'errors': errors.length,
       };
     case 'errors':
-      return {'ok': true, 'errors': errors.map((e) => e.split('\n').take(3).join(' | ')).toList()};
+      return {
+        'ok': true,
+        'errors': errors.map((e) => e.split('\n').take(3).join(' | ')).toList(),
+      };
     case 'unfocus':
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
