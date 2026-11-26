@@ -876,3 +876,38 @@ void _applyComposerFormat(
   }
   focusNode.requestFocus();
 }
+
+/// The composer's text selection menu, with "Paste Image" on iOS when the
+/// clipboard holds an image.
+Widget _composerContextMenu(
+  EditableTextState editableTextState, {
+  required bool canPasteImage,
+  required VoidCallback onPasteImage,
+}) {
+  if (defaultTargetPlatform == TargetPlatform.iOS &&
+      SystemContextMenu.isSupportedByField(editableTextState)) {
+    return SystemContextMenu.editableText(
+      editableTextState: editableTextState,
+      items: [
+        if (canPasteImage)
+          IOSSystemContextMenuItemCustom(
+            title: 'Paste Image',
+            onPressed: onPasteImage,
+          ),
+        ...SystemContextMenu.getDefaultItems(editableTextState),
+      ],
+    );
+  }
+
+  final buttonItems = [...editableTextState.contextMenuButtonItems];
+  if (defaultTargetPlatform == TargetPlatform.iOS && canPasteImage) {
+    buttonItems.insert(
+      0,
+      ContextMenuButtonItem(label: 'Paste Image', onPressed: onPasteImage),
+    );
+  }
+  return AdaptiveTextSelectionToolbar.buttonItems(
+    anchors: editableTextState.contextMenuAnchors,
+    buttonItems: buttonItems,
+  );
+}

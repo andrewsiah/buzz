@@ -37,6 +37,7 @@ import 'package:buzz/features/channels/voice_note_play_pause_icon.dart';
 import 'package:buzz/features/channels/voice_note_recording.dart';
 import 'package:buzz/features/channels/voice_note_waveform.dart';
 import 'package:buzz/shared/custom_emoji/custom_emoji.dart';
+import 'package:buzz/shared/dictation/voice_dictation.dart';
 import 'package:buzz/shared/custom_emoji/custom_emoji_provider.dart';
 import 'package:buzz/shared/agents/owned_agent_directory.dart';
 import 'package:buzz/shared/mentions/agent_identity_provider.dart';
@@ -58,6 +59,7 @@ part 'compose_bar_test/solo_draft_tests.dart';
 part 'compose_bar_test/durable_mention_tests.dart';
 part 'compose_bar_test/agent_prefill_tests.dart';
 part 'compose_bar_test/share_delivery_tests.dart';
+part 'compose_bar_test/dictation_tests.dart';
 
 final _pngBytes = Uint8List.fromList([
   0x89,
@@ -758,6 +760,7 @@ void main() {
   durableMentionTests();
   agentPrefillTests();
   shareDeliveryTests();
+  dictationTests();
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
@@ -803,7 +806,10 @@ void main() {
 
       expect(find.byType(TextField), findsNothing);
       expect(find.byTooltip('Add attachment').hitTestable(), findsOneWidget);
-      expect(find.byIcon(BuzzIcons.arrowUp).hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('composer-mic')).hitTestable(),
+        findsOne,
+      );
       expect(find.byKey(const ValueKey('composer-footer-gradient')), findsOne);
       final composerBackdrop = find.descendant(
         of: find.byKey(const ValueKey('composer-footer-gradient')),

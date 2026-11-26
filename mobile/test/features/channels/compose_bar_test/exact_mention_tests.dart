@@ -527,5 +527,7 @@ void exactMentionTests() {
       '@Scout hello',
     );
     expect(find.textContaining('is ambiguous'), findsOneWidget);
+    // Let the restored draft's mention search debounce finish.
+    await tester.pump(mentionSearchDebounce);
   });
 }

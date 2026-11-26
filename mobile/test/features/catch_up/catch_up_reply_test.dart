@@ -8,6 +8,7 @@ import 'package:buzz/features/catch_up/catch_up_page.dart';
 import 'package:buzz/features/catch_up/catch_up_queue.dart';
 import 'package:buzz/features/catch_up/catch_up_reader.dart';
 import 'package:buzz/features/catch_up/catch_up_reply.dart';
+import 'package:buzz/shared/dictation/voice_dictation.dart';
 import 'package:buzz/features/catch_up/catch_up_sources.dart';
 import 'package:buzz/features/catch_up/catch_up_state.dart';
 import 'package:buzz/shared/relay/relay.dart';
@@ -22,7 +23,7 @@ import 'catch_up_read_test.dart' show FakeReader;
 
 typedef Sent = ({String channelId, String? rootId, String content});
 
-class FakeDictation implements CatchUpDictation {
+class FakeDictation implements VoiceDictation {
   final log = <String>[];
   final _levels = StreamController<double>.broadcast();
 
@@ -95,12 +96,12 @@ void main() {
             if (sendError != null) throw sendError;
             sent.add((channelId: channelId, rootId: rootId, content: content));
           }),
-          catchUpDictationFactoryProvider.overrideWithValue(() {
+          voiceDictationFactoryProvider.overrideWithValue(() {
             final dictation = FakeDictation();
             dictations.add(dictation);
             return dictation;
           }),
-          catchUpTranscriberProvider.overrideWithValue((channelId, wav) async {
+          voiceTranscriberProvider.overrideWithValue((channelId, wav) async {
             heard.add((channelId, wav.length));
             await gate?.future;
             return transcript;
