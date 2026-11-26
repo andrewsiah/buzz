@@ -14665,14 +14665,14 @@ void main() {
       await tester.pumpWidget(_buildTestable(messages: []));
       await tester.pumpAndSettle();
 
+      expect(find.byType(TextField), findsNothing);
       expect(find.byTooltip('Voice typing').hitTestable(), findsOneWidget);
-      expect(find.byIcon(BuzzIcons.arrowUp).hitTestable(), findsOneWidget);
 
       await tester.tap(find.text('Message #general'));
       await tester.pumpAndSettle();
 
+      expect(find.byType(TextField), findsOneWidget);
       expect(find.byTooltip('Voice typing').hitTestable(), findsOneWidget);
-      expect(find.byIcon(BuzzIcons.arrowUp).hitTestable(), findsOneWidget);
     });
 
     testWidgets('shows hint text', (tester) async {
