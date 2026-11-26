@@ -39,31 +39,30 @@ void dictationTests() {
   ) async {
     final sent = <String>[];
     final dictations = <_FakeVoiceDictation>[];
-    final heard = <String>['hello there', 'ship it', '', 'never'];
+    final heard = <String>['hello there', 'ship it', '', 'never', 'kept'];
     final transcribed = <String>[];
     var denyNext = false;
-    final transcribing = Completer<void>();
-    var holdTranscript = false;
+    Completer<void>? hold;
 
-    await tester.pumpWidget(
-      _buildComposeBar(
-        uploadService: _testUploadService(nostr.Keys.generate().nsec),
-        onSend: (content, mentionPubkeys, {mediaTags = const []}) async =>
-            sent.add(content),
-        overrides: [
-          voiceDictationFactoryProvider.overrideWithValue(() {
-            final dictation = _FakeVoiceDictation(denied: denyNext);
-            dictations.add(dictation);
-            return dictation;
-          }),
-          voiceTranscriberProvider.overrideWithValue((channelId, wav) async {
-            if (holdTranscript) await transcribing.future;
-            transcribed.add(channelId);
-            return heard.removeAt(0);
-          }),
-        ],
-      ),
+    Widget composer({String? threadHeadId}) => _buildComposeBar(
+      threadHeadId: threadHeadId,
+      uploadService: _testUploadService(nostr.Keys.generate().nsec),
+      onSend: (content, mentionPubkeys, {mediaTags = const []}) async =>
+          sent.add(content),
+      overrides: [
+        voiceDictationFactoryProvider.overrideWithValue(() {
+          final dictation = _FakeVoiceDictation(denied: denyNext);
+          dictations.add(dictation);
+          return dictation;
+        }),
+        voiceTranscriberProvider.overrideWithValue((channelId, wav) async {
+          if (hold != null) await hold.future;
+          transcribed.add(channelId);
+          return heard.removeAt(0);
+        }),
+      ],
     );
+    await tester.pumpWidget(composer());
     final mic = find.byKey(const ValueKey('composer-mic')).hitTestable();
     final send = find.ancestor(
       of: find.byIcon(BuzzIcons.arrowUp),
@@ -118,7 +117,7 @@ void dictationTests() {
     expect(sent, hasLength(2));
 
     // Cancelling while transcribing drops the words when they arrive.
-    holdTranscript = true;
+    hold = Completer<void>();
     await tester.tap(mic);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Stop and send'));
@@ -126,10 +125,44 @@ void dictationTests() {
     expect(find.bySemanticsLabel('Turning speech into text'), findsOneWidget);
     await tester.tap(find.byTooltip('Cancel voice typing'));
     await tester.pump();
-    transcribing.complete();
+    hold.complete();
     await tester.pumpAndSettle();
     expect(sent, hasLength(2));
     expect(find.textContaining('never'), findsNothing);
+
+    // Words already on their way to text still land if the app goes to the
+    // background; an open mic is thrown away.
+    hold = Completer<void>();
+    await tester.tap(mic);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Stop and send'));
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    hold.complete();
+    hold = null;
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(sent, ['hello there', 'ship it', 'kept']);
+
+    await tester.tap(mic);
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(dictations.last.log, ['start', 'dispose']);
+    expect(mic, findsOneWidget);
+
+    // Switching conversations throws an open recording away too.
+    await tester.tap(mic);
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(composer(threadHeadId: 'thread-1'));
+    await tester.pumpAndSettle();
+    expect(dictations.last.log, ['start', 'dispose']);
+    expect(find.byKey(const ValueKey('composer-dictation')), findsNothing);
+    expect(sent, hasLength(3));
 
     // No microphone access: a clear message, and the mic is back.
     denyNext = true;

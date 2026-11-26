@@ -31,9 +31,9 @@ _ComposerDictation _useComposerDictation({
   required bool enabled,
 }) {
   final stage = useState(_DictationStage.idle);
-  final levels = useState<List<double>>(const []);
   final session = useRef<VoiceDictation?>(null);
-  final levelSub = useRef<StreamSubscription<double>?>(null);
+  // The conversation the recording belongs to.
+  final sessionDraft = useRef<String?>(null);
   final limit = useRef<Timer?>(null);
   final latest = useRef((send: send, expand: expand))
     ..value = (send: send, expand: expand);
@@ -43,8 +43,6 @@ _ComposerDictation _useComposerDictation({
   void release() {
     limit.value?.cancel();
     limit.value = null;
-    unawaited(levelSub.value?.cancel());
-    levelSub.value = null;
     final current = session.value;
     session.value = null;
     if (current != null) unawaited(current.dispose());
@@ -53,7 +51,6 @@ _ComposerDictation _useComposerDictation({
   void reset() {
     release();
     stage.value = _DictationStage.idle;
-    levels.value = const [];
   }
 
   // A conversation switch or unmount throws an unfinished recording away.
@@ -115,7 +112,7 @@ _ComposerDictation _useComposerDictation({
     _dismissComposerKeyboard(focusNode);
     final current = ref.read(voiceDictationFactoryProvider)();
     session.value = current;
-    levels.value = const [];
+    sessionDraft.value = draftKey;
     stage.value = _DictationStage.starting;
     try {
       await current.start();
@@ -129,28 +126,28 @@ _ComposerDictation _useComposerDictation({
     }
     if (!identical(session.value, current)) return; // cancelled meanwhile
     stage.value = _DictationStage.listening;
-    levelSub.value = current.levels.listen((level) {
-      final next = [...levels.value, level];
-      levels.value = next.length > 48 ? next.sublist(next.length - 48) : next;
-    });
     limit.value = Timer(
       voiceDictationMaxDuration,
       () => unawaited(finish(andSend: false)),
     );
   }
 
-  // Leaving the app while listening throws the recording away, so a
-  // pocketed phone never sends what it overheard.
+  // Leaving the app while the mic is open throws the recording away, so a
+  // pocketed phone never sends what it overheard. Words already on their way
+  // to text still land.
   useOnAppLifecycleStateChange((_, state) {
     if (state != AppLifecycleState.resumed &&
         state != AppLifecycleState.inactive &&
-        session.value != null) {
+        session.value != null &&
+        stage.value != _DictationStage.transcribing) {
       reset();
     }
   });
 
   // After a conversation switch the recording is gone; show the composer.
-  final current = session.value == null ? _DictationStage.idle : stage.value;
+  final current = session.value == null || sessionDraft.value != draftKey
+      ? _DictationStage.idle
+      : stage.value;
   return _ComposerDictation(
     start: enabled && current == _DictationStage.idle
         ? () => unawaited(start())
@@ -159,7 +156,7 @@ _ComposerDictation _useComposerDictation({
         ? null
         : _DictationStrip(
             stage: current,
-            levels: levels.value,
+            dictation: session.value!,
             onCancel: reset,
             onStop: () => unawaited(finish(andSend: false)),
             onSend: () => unawaited(finish(andSend: true)),
@@ -167,23 +164,32 @@ _ComposerDictation _useComposerDictation({
   );
 }
 
-class _DictationStrip extends StatelessWidget {
+/// Owns the level bars, so only the strip redraws while listening.
+class _DictationStrip extends HookWidget {
   const _DictationStrip({
     required this.stage,
-    required this.levels,
+    required this.dictation,
     required this.onCancel,
     required this.onStop,
     required this.onSend,
   });
 
   final _DictationStage stage;
-  final List<double> levels;
+  final VoiceDictation dictation;
   final VoidCallback onCancel;
   final VoidCallback onStop;
   final VoidCallback onSend;
 
   @override
   Widget build(BuildContext context) {
+    final shown = useState<List<double>>(const []);
+    useEffect(() {
+      final subscription = dictation.levels.listen((level) {
+        final next = [...shown.value, level];
+        shown.value = next.length > 48 ? next.sublist(next.length - 48) : next;
+      });
+      return subscription.cancel;
+    }, [dictation]);
     final colors = context.colors;
     final listening = stage == _DictationStage.listening;
     return Row(
@@ -207,7 +213,7 @@ class _DictationStrip extends StatelessWidget {
             child: SizedBox(
               height: 32,
               child: CustomPaint(
-                painter: DictationLevelsPainter(levels, colors.primary),
+                painter: DictationLevelsPainter(shown.value, colors.primary),
               ),
             ),
           ),

@@ -231,7 +231,7 @@ class CatchUpReplyBar extends HookConsumerWidget {
       field = Row(
         children: [
           IconButton(
-            key: const ValueKey('voice-dictation-discard'),
+            key: const ValueKey('catch-up-reply-discard'),
             tooltip: 'Discard recording',
             icon: const Icon(BuzzIcons.x, size: 20),
             onPressed: () => unawaited(discard()),
@@ -275,7 +275,7 @@ class CatchUpReplyBar extends HookConsumerWidget {
       );
     } else {
       field = TextField(
-        key: const ValueKey('voice-dictation-field'),
+        key: const ValueKey('catch-up-reply-field'),
         controller: controller,
         minLines: 1,
         maxLines: 4,
@@ -300,21 +300,21 @@ class CatchUpReplyBar extends HookConsumerWidget {
     final Widget action;
     if (mode.value == _Mode.recording) {
       action = IconButton.filled(
-        key: const ValueKey('voice-dictation-mic-send'),
+        key: const ValueKey('catch-up-reply-mic-send'),
         tooltip: 'Send voice reply',
         icon: const Icon(BuzzIcons.arrowUp, size: 20),
         onPressed: () => unawaited(finishRecording()),
       );
     } else if (hasText && !busy) {
       action = IconButton.filled(
-        key: const ValueKey('voice-dictation-send'),
+        key: const ValueKey('catch-up-reply-send'),
         tooltip: 'Send reply',
         icon: const Icon(BuzzIcons.arrowUp, size: 20),
         onPressed: () => unawaited(sendTyped()),
       );
     } else {
       action = IconButton.filledTonal(
-        key: const ValueKey('voice-dictation-mic'),
+        key: const ValueKey('catch-up-reply-mic'),
         tooltip: 'Talk a reply',
         icon: const Icon(BuzzIcons.mic, size: 20),
         onPressed: busy ? null : () => unawaited(startRecording()),
