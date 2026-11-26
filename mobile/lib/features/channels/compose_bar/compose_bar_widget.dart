@@ -855,41 +855,14 @@ class ComposeBar extends HookConsumerWidget {
       );
     }, [context, ref, queueAttachment, uploadError]);
 
-    final buildContextMenu = useCallback<EditableTextContextMenuBuilder>((
-      context,
-      editableTextState,
-    ) {
-      if (defaultTargetPlatform == TargetPlatform.iOS &&
-          SystemContextMenu.isSupportedByField(editableTextState)) {
-        return SystemContextMenu.editableText(
-          editableTextState: editableTextState,
-          items: [
-            if (clipboardHasImage.value)
-              IOSSystemContextMenuItemCustom(
-                title: 'Paste Image',
-                onPressed: pasteClipboardImage,
-              ),
-            ...SystemContextMenu.getDefaultItems(editableTextState),
-          ],
-        );
-      }
-
-      final buttonItems = [...editableTextState.contextMenuButtonItems];
-      if (defaultTargetPlatform == TargetPlatform.iOS &&
-          clipboardHasImage.value) {
-        buttonItems.insert(
-          0,
-          ContextMenuButtonItem(
-            label: 'Paste Image',
-            onPressed: pasteClipboardImage,
-          ),
-        );
-      }
-      return AdaptiveTextSelectionToolbar.buttonItems(
-        anchors: editableTextState.contextMenuAnchors,
-        buttonItems: buttonItems,
-      );
-    }, [clipboardHasImage, pasteClipboardImage]);
+    final buildContextMenu = useCallback<EditableTextContextMenuBuilder>(
+      (_, state) => _composerContextMenu(
+        state,
+        canPasteImage: clipboardHasImage.value,
+        onPasteImage: pasteClipboardImage,
+      ),
+      [clipboardHasImage, pasteClipboardImage],
+    );
 
     void uploadPastedImage(KeyboardInsertedContent content) {
       final bytes = content.data;
@@ -1021,6 +994,18 @@ class ComposeBar extends HookConsumerWidget {
     );
 
     final readOnly = interactionLocked || (draftMembers != null && sending);
+    final dictation = _useComposerDictation(
+      ref: ref,
+      channelId: channelId,
+      draftKey: draftKey,
+      controller: controller,
+      focusNode: focusNode,
+      uploadError: uploadError,
+      attachmentSurface: attachmentSurface,
+      expand: expandComposer,
+      send: send,
+      enabled: !readOnly && !voiceNote.isPreparing && !voiceNote.isRecording,
+    );
     // Matches what _composerSuggestionPanel renders, and only while the field
     // can be edited.
     final pickerVisible =
@@ -1117,7 +1102,8 @@ class ComposeBar extends HookConsumerWidget {
     final hasPendingUploads = uploadingCount.value > 0;
     return _ComposerDockFrame(
       expansionAnimation: composerExpansionController,
-      forceFullWidth: _voiceNoteFullWidth(voiceNote, attachments.value),
+      forceFullWidth:
+          dictation.active || _voiceNoteFullWidth(voiceNote, attachments.value),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1144,7 +1130,7 @@ class ComposeBar extends HookConsumerWidget {
               absorbing: interactionLocked || (draftMembers != null && sending),
               child: _ComposeBarLayout(
                 surfaceKey: sendSurfaceKey,
-                voiceNoteRecorder: voiceNote.recorder,
+                voiceNoteRecorder: voiceNote.recorder ?? dictation.strip,
                 attachments: attachments.value,
                 onRemoveAttachment: removeAttachment,
                 uploadError: uploadError.value,
@@ -1190,6 +1176,7 @@ class ComposeBar extends HookConsumerWidget {
                 canSend: composerText.trim().isNotEmpty || hasAttachments,
                 isSending: isSending.value || (draftMembers != null && sending),
                 readOnly: readOnly,
+                onDictate: dictation.start,
               ),
             ),
           ),

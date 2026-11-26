@@ -8,6 +8,7 @@ import 'package:buzz/features/catch_up/catch_up_page.dart';
 import 'package:buzz/features/catch_up/catch_up_queue.dart';
 import 'package:buzz/features/catch_up/catch_up_reader.dart';
 import 'package:buzz/features/catch_up/catch_up_reply.dart';
+import 'package:buzz/shared/dictation/voice_dictation.dart';
 import 'package:buzz/features/catch_up/catch_up_sources.dart';
 import 'package:buzz/features/catch_up/catch_up_state.dart';
 import 'package:buzz/shared/relay/relay.dart';
@@ -22,7 +23,7 @@ import 'catch_up_read_test.dart' show FakeReader;
 
 typedef Sent = ({String channelId, String? rootId, String content});
 
-class FakeDictation implements CatchUpDictation {
+class FakeDictation implements VoiceDictation {
   final log = <String>[];
   final _levels = StreamController<double>.broadcast();
 
@@ -95,12 +96,12 @@ void main() {
             if (sendError != null) throw sendError;
             sent.add((channelId: channelId, rootId: rootId, content: content));
           }),
-          catchUpDictationFactoryProvider.overrideWithValue(() {
+          voiceDictationFactoryProvider.overrideWithValue(() {
             final dictation = FakeDictation();
             dictations.add(dictation);
             return dictation;
           }),
-          catchUpTranscriberProvider.overrideWithValue((channelId, wav) async {
+          voiceTranscriberProvider.overrideWithValue((channelId, wav) async {
             heard.add((channelId, wav.length));
             await gate?.future;
             return transcript;
@@ -113,9 +114,9 @@ void main() {
     expect(find.text('2 Left'), findsOneWidget);
     expect(find.text('Direct message'), findsOneWidget);
 
-    final field = find.byKey(const ValueKey('catch-up-reply-field'));
-    final sendButton = find.byKey(const ValueKey('catch-up-reply-send'));
-    final mic = find.byKey(const ValueKey('catch-up-reply-mic'));
+    final field = find.byKey(const ValueKey('voice-dictation-field'));
+    final sendButton = find.byKey(const ValueKey('voice-dictation-send'));
+    final mic = find.byKey(const ValueKey('voice-dictation-mic'));
 
     // Empty box: the round mic, no send button.
     expect(mic, findsOneWidget);
@@ -157,7 +158,7 @@ void main() {
     expect(find.bySemanticsLabel('Recording'), findsOneWidget);
     expect(find.byTooltip('Discard recording'), findsOneWidget);
     semantics.dispose();
-    await tester.tap(find.byKey(const ValueKey('catch-up-reply-discard')));
+    await tester.tap(find.byKey(const ValueKey('voice-dictation-discard')));
     await tester.pump();
     expect(dictations.single.log, ['start', 'cancel', 'dispose']);
     expect(heard, isEmpty);
@@ -166,7 +167,7 @@ void main() {
     // Nothing heard: "Didn't catch that", nothing sent, the card stays.
     await tester.tap(mic);
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('catch-up-reply-mic-send')));
+    await tester.tap(find.byKey(const ValueKey('voice-dictation-mic-send')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(dictations[1].log, ['start', 'stop', 'dispose']);
@@ -181,7 +182,7 @@ void main() {
     gate = Completer();
     await tester.tap(mic);
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('catch-up-reply-mic-send')));
+    await tester.tap(find.byKey(const ValueKey('voice-dictation-mic-send')));
     await tester.pump();
     expect(find.text('Transcribing…'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Mark as read'));

@@ -32,6 +32,9 @@ class _ComposeBarLayout extends HookWidget {
   final bool isSending;
   final bool readOnly;
 
+  /// Shows a mic in Send's place while there is nothing to send.
+  final VoidCallback? onDictate;
+
   const _ComposeBarLayout({
     required this.surfaceKey,
     required this.voiceNoteRecorder,
@@ -63,6 +66,7 @@ class _ComposeBarLayout extends HookWidget {
     required this.hasPendingUploads,
     required this.isSending,
     this.readOnly = false,
+    this.onDictate,
   });
 
   @override
@@ -84,6 +88,18 @@ class _ComposeBarLayout extends HookWidget {
     }, [voiceNoteRecorder != null, motionDuration]);
     return _DragDownToDismissKeyboard(
       child: _buildBar(context, recordingTransition),
+    );
+  }
+
+  Widget _sendSlot() {
+    final dictate = onDictate;
+    if (dictate != null && !canSend && !isSending && !hasPendingUploads) {
+      return _DictationMicButton(onTap: dictate);
+    }
+    return _SendButton(
+      isDisabled: !canSend || hasPendingUploads,
+      isSending: isSending,
+      onTap: onSend,
     );
   }
 
@@ -176,11 +192,7 @@ class _ComposeBarLayout extends HookWidget {
                 ),
               ),
               const SizedBox(width: Grid.xxs),
-              _SendButton(
-                isDisabled: !canSend || hasPendingUploads,
-                isSending: isSending,
-                onTap: onSend,
-              ),
+              _sendSlot(),
             ],
           ),
         _ExpandedComposerActionsMotion(
@@ -234,11 +246,7 @@ class _ComposeBarLayout extends HookWidget {
                                   onTap: onOpenFormatting,
                                 ),
                                 const Spacer(),
-                                _SendButton(
-                                  isDisabled: !canSend || hasPendingUploads,
-                                  isSending: isSending,
-                                  onTap: onSend,
-                                ),
+                                _sendSlot(),
                               ],
                             ),
                     ),
